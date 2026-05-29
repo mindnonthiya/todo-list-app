@@ -1,9 +1,11 @@
 CREATE DATABASE todo_app;
 
-USE todo_app;
+-- Connect to todo_app before running the table setup below.
 
-CREATE TABLE todos (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS todos (
+  id SERIAL PRIMARY KEY,
   title VARCHAR(255) NOT NULL,
-  completed BOOLEAN DEFAULT FALSE
+  completed BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
