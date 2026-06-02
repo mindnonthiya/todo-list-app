@@ -1,0 +1,6 @@
+{
+  "files": ["todo_list/index.html"],
+  "insertBefore": "</body>",
+  "commentSyntax": "html",
+  "cspChecked": true
+}
