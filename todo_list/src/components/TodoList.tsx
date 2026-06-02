@@ -2,8 +2,6 @@ import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState }
 import {
   CalendarDays,
   Check,
-  Clock3,
-  Edit3,
   Pencil,
   Plus,
   RefreshCw,
@@ -14,6 +12,7 @@ import {
 import "./TodoList.css";
 
 type Filter = "all" | "active" | "completed";
+type PlannerView = "calendar" | "tasks" | "add" | "progress";
 type DoodleMood = "happy" | "focused" | "excited" | "relaxed" | "sleepy" | "motivated";
 
 interface Todo {
@@ -27,9 +26,16 @@ interface Todo {
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5000/api/todos";
 
 const FILTER_LABELS: Record<Filter, string> = {
-  all: "All notes",
-  active: "In progress",
+  all: "All",
+  active: "Active",
   completed: "Done",
+};
+
+const VIEW_LABELS: Record<PlannerView, string> = {
+  calendar: "Calendar",
+  tasks: "Daily Task",
+  add: "Add Note",
+  progress: "Progress",
 };
 
 const MOODS: DoodleMood[] = ["happy", "focused", "excited", "relaxed", "sleepy", "motivated"];
@@ -52,6 +58,7 @@ export default function TodoList() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [title, setTitle] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [activeView, setActiveView] = useState<PlannerView>("calendar");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -104,6 +111,7 @@ export default function TodoList() {
 
   const todaysSummary = useMemo(() => {
     const nextTask = todos.find((todo) => !todo.completed);
+
     return {
       nextTask,
       caption:
@@ -126,6 +134,11 @@ export default function TodoList() {
 
     return todos;
   }, [filter, todos]);
+
+  const previewTodos = useMemo(() => {
+    const activeTodos = todos.filter((todo) => !todo.completed);
+    return (activeTodos.length > 0 ? activeTodos : todos).slice(0, 3);
+  }, [todos]);
 
   const addTodo = async () => {
     const trimmedTitle = title.trim();
@@ -154,7 +167,7 @@ export default function TodoList() {
       setTodos((currentTodos) => [newTodo, ...currentTodos]);
       setTitle("");
       setFilter("all");
-      inputRef.current?.focus();
+      setActiveView("tasks");
     } catch (fetchError) {
       console.error(fetchError);
       setError("เพิ่มรายการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
@@ -233,232 +246,276 @@ export default function TodoList() {
     setEditingTitle("");
   };
 
-  const focusNewTask = () => {
-    inputRef.current?.focus();
-    inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  const openAddView = () => {
+    setActiveView("add");
+    window.setTimeout(() => inputRef.current?.focus(), 120);
   };
 
   return (
     <main className="planner-shell">
       <div className="paper-grain" aria-hidden="true" />
-      <section className="planner-page">
-        <section className="calendar-first-layout" aria-label="Calendar planner dashboard">
-          <CalendarCard today={today} days={calendarDays} taskCount={stats.total} />
-
-          <div className="calendar-side-stack">
-            <section className="mood-card glass-card">
-              <div className="section-heading compact">
-                <span>Today&apos;s mood</span>
-                <Sparkles size={17} />
-              </div>
-              <DoodleMoodSticker mood="happy" size="medium" />
-              <h2>Soft focus</h2>
-              <p>Decorative mood stickers keep the diary feeling playful while your task data stays unchanged.</p>
-              <div className="mini-mood-row" aria-hidden="true">
-                <DoodleMoodSticker mood="focused" size="tiny" />
-                <DoodleMoodSticker mood="relaxed" size="tiny" />
-                <DoodleMoodSticker mood="excited" size="tiny" />
-              </div>
-            </section>
-
-            <section className="progress-card glass-card">
-              <div className="section-heading compact">
-                <span>Progress</span>
-                <span className="progress-percent">{stats.progress}%</span>
-              </div>
-              <div className="progress-ring" style={{ "--progress": `${stats.progress}%` } as CSSProperties}>
-                <span>{stats.completed}</span>
-                <small>done</small>
-              </div>
-              <div className="progress-track" aria-label={`${stats.progress}% completed`}>
-                <span style={{ width: `${stats.progress}%` }} />
-              </div>
-              <p>{stats.total === 0 ? "Add your first task to start the day." : todaysSummary.caption}</p>
-            </section>
-
-            <section className="summary-card glass-card">
-              <div className="section-heading compact">
-                <span>Today&apos;s summary</span>
-                <Clock3 size={17} />
-              </div>
-              <h2>{stats.active} active</h2>
-              <p>{todaysSummary.nextTask ? todaysSummary.nextTask.title : "Your task basket is peaceful right now."}</p>
-              <div className="summary-stack">
-                <span>{stats.total} total notes</span>
-                <span>{stats.completed} tucked away</span>
-              </div>
-            </section>
-          </div>
-        </section>
-
-        <section className="workspace-grid">
-          <aside className="control-panel glass-card">
-            <div className="section-heading">
-              <div>
-                <span>Quick capture</span>
-                <h2>Add a tiny plan</h2>
-              </div>
-              <Edit3 size={18} />
+      <section className="planner-stage" aria-label="Pastel planner app preview">
+        <div className="planner-phone">
+          <header className="app-topbar">
+            <button type="button" className="top-icon-button" aria-label="Menu">
+              <span />
+              <span />
+            </button>
+            <div>
+              <p>{today.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</p>
+              <h1>{VIEW_LABELS[activeView]}</h1>
             </div>
-            <p className="panel-copy">
-              Type a task and press Enter or Add. The same API create flow is preserved.
-            </p>
-
-            <div className="task-input-card">
-              <label htmlFor="todo-title">Task name</label>
-              <div className="task-input-row">
-                <input
-                  ref={inputRef}
-                  id="todo-title"
-                  type="text"
-                  placeholder="Write a cozy task..."
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      addTodo();
-                    }
-                  }}
-                />
-                <button onClick={addTodo} type="button" className="primary-button">
-                  <Plus size={18} />
-                  Add
-                </button>
-              </div>
+            <div className="avatar-sticker" aria-hidden="true">
+              <DoodleMoodSticker mood="motivated" size="tiny" />
             </div>
+          </header>
 
-            <div className="filter-stack" aria-label="Todo filters">
-              {(["all", "active", "completed"] as Filter[]).map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => setFilter(item)}
-                  className={filter === item ? "filter-button is-active" : "filter-button"}
-                >
-                  <span>{FILTER_LABELS[item]}</span>
-                  <strong>{item === "all" ? stats.total : item === "active" ? stats.active : stats.completed}</strong>
-                </button>
-              ))}
-            </div>
+          {error && <div className="app-error">{error}</div>}
 
-            <div className="stats-row" aria-label="Todo statistics">
-              <StatCard label="Total" value={stats.total} tone="sage" />
-              <StatCard label="Active" value={stats.active} tone="yellow" />
-              <StatCard label="Done" value={stats.completed} tone="blue" />
-            </div>
-          </aside>
-
-          <section className="todo-board glass-card">
-            <div className="board-header">
-              <div>
-                <p className="section-kicker">Today</p>
-                <h2>Planner notes</h2>
-              </div>
-              <button type="button" onClick={fetchTodos} className="ghost-button">
-                <RefreshCw size={16} />
-                Refresh
-              </button>
-            </div>
-
-            {error && <div className="error-banner">{error}</div>}
-
-            {isLoading ? (
-              <div className="task-skeleton-grid" aria-label="Loading todos">
-                {[1, 2, 3, 4].map((item) => (
-                  <div key={item} className="task-skeleton" />
-                ))}
-              </div>
-            ) : filteredTodos.length === 0 ? (
-              <EmptyState filter={filter} />
-            ) : (
-              <div className="task-grid">
-                {filteredTodos.map((todo) => {
-                  const category = getCategory(todo);
-                  const priority = getPriority(todo);
-                  const mood = getMood(todo);
-
-                  return (
-                    <article key={todo.id} className={todo.completed ? "task-card is-complete" : "task-card"}>
-                      <div className="task-card-header">
-                        <DoodleMoodSticker mood={mood} size="small" />
-                        <div className="task-badges">
-                          <span className={`category-chip ${category.tone}`}>{category.label}</span>
-                          <span className={`priority-chip ${priority.tone}`}>{priority.label} priority</span>
-                        </div>
-                      </div>
-
-                      <div className="task-main-row">
-                        <button
-                          type="button"
-                          onClick={() => updateTodo(todo.id, { completed: !todo.completed })}
-                          className={todo.completed ? "complete-button is-complete" : "complete-button"}
-                          aria-label={todo.completed ? "Mark as active" : "Mark as completed"}
-                        >
-                          <Check size={18} />
-                        </button>
-
-                        <div className="task-content">
-                          {editingId === todo.id ? (
-                            <input
-                              value={editingTitle}
-                              onChange={(event) => setEditingTitle(event.target.value)}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") {
-                                  saveEditing();
-                                }
-
-                                if (event.key === "Escape") {
-                                  cancelEditing();
-                                }
-                              }}
-                              className="edit-input"
-                              autoFocus
-                            />
-                          ) : (
-                            <h3>{todo.title}</h3>
-                          )}
-                          <p>{todo.completed ? "Completed with a happy little check" : formatTaskMeta(todo)}</p>
-                        </div>
-                      </div>
-
-                      <div className="task-footer">
-                        <span className="task-status-dot" />
-                        <span>{todo.completed ? "Done" : "In progress"}</span>
-                        <div className="task-actions">
-                          {editingId === todo.id ? (
-                            <>
-                              <button type="button" onClick={cancelEditing} className="icon-button" aria-label="Cancel editing">
-                                <X size={16} />
-                              </button>
-                              <button type="button" onClick={saveEditing} className="save-button">
-                                Save
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button type="button" onClick={() => startEditing(todo)} className="icon-button" aria-label="Edit todo">
-                                <Pencil size={16} />
-                              </button>
-                              <button type="button" onClick={() => deleteTodo(todo.id)} className="icon-button danger" aria-label="Delete todo">
-                                <Trash2 size={16} />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
+          <div className="screen-viewport">
+            {activeView === "calendar" && (
+              <section className="app-screen calendar-screen" aria-label="Calendar screen">
+                <CalendarCard today={today} days={calendarDays} taskCount={stats.total} />
+                <section className="today-panel">
+                  <div className="panel-handle" aria-hidden="true" />
+                  <div className="panel-title-row">
+                    <h2>Today</h2>
+                    <button type="button" onClick={() => setActiveView("tasks")}>
+                      View all
+                    </button>
+                  </div>
+                  {isLoading ? (
+                    <div className="compact-skeleton-stack">
+                      {[1, 2, 3].map((item) => (
+                        <div key={item} className="compact-skeleton" />
+                      ))}
+                    </div>
+                  ) : previewTodos.length === 0 ? (
+                    <MiniEmptyState onAdd={openAddView} />
+                  ) : (
+                    <div className="timeline-list">
+                      {previewTodos.map((todo) => (
+                        <CompactTodoRow
+                          key={todo.id}
+                          todo={todo}
+                          editingId={editingId}
+                          editingTitle={editingTitle}
+                          setEditingTitle={setEditingTitle}
+                          onToggle={() => updateTodo(todo.id, { completed: !todo.completed })}
+                          onEdit={() => startEditing(todo)}
+                          onCancel={cancelEditing}
+                          onSave={saveEditing}
+                          onDelete={() => deleteTodo(todo.id)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+              </section>
             )}
-          </section>
-        </section>
+
+            {activeView === "tasks" && (
+              <section className="app-screen tasks-screen" aria-label="Daily task screen">
+                <div className="screen-header-row">
+                  <div>
+                    <span>December planner</span>
+                    <h2>Daily Task</h2>
+                  </div>
+                  <button type="button" onClick={fetchTodos} className="round-refresh" aria-label="Refresh todos">
+                    <RefreshCw size={15} />
+                  </button>
+                </div>
+
+                <div className="filter-tabs" aria-label="Todo filters">
+                  {(["all", "active", "completed"] as Filter[]).map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => setFilter(item)}
+                      className={filter === item ? "is-active" : ""}
+                    >
+                      {FILTER_LABELS[item]}
+                      <span>{item === "all" ? stats.total : item === "active" ? stats.active : stats.completed}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {isLoading ? (
+                  <div className="compact-skeleton-stack roomy">
+                    {[1, 2, 3, 4].map((item) => (
+                      <div key={item} className="compact-skeleton" />
+                    ))}
+                  </div>
+                ) : filteredTodos.length === 0 ? (
+                  <EmptyState filter={filter} onAdd={openAddView} />
+                ) : (
+                  <div className="daily-card-list">
+                    {filteredTodos.map((todo) => {
+                      const category = getCategory(todo);
+                      const priority = getPriority(todo);
+                      const mood = getMood(todo);
+
+                      return (
+                        <TaskCard
+                          key={todo.id}
+                          todo={todo}
+                          mood={mood}
+                          category={category}
+                          priority={priority}
+                          editingId={editingId}
+                          editingTitle={editingTitle}
+                          setEditingTitle={setEditingTitle}
+                          onToggle={() => updateTodo(todo.id, { completed: !todo.completed })}
+                          onEdit={() => startEditing(todo)}
+                          onCancel={cancelEditing}
+                          onSave={saveEditing}
+                          onDelete={() => deleteTodo(todo.id)}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {activeView === "add" && (
+              <section className="app-screen add-screen" aria-label="Add note screen">
+                <div className="add-hero">
+                  <DoodleMoodSticker mood="excited" size="medium" />
+                  <div>
+                    <span>Quick note</span>
+                    <h2>Add Todo</h2>
+                  </div>
+                </div>
+
+                <div className="date-picker-card">
+                  <span>Date and Time</span>
+                  <div className="date-columns" aria-hidden="true">
+                    <strong>{today.getDate()}</strong>
+                    <strong>{today.toLocaleDateString("en-US", { month: "2-digit" })}</strong>
+                    <strong>{today.getHours().toString().padStart(2, "0")}</strong>
+                    <strong>{today.getMinutes().toString().padStart(2, "0")}</strong>
+                    <strong>{today.getHours() >= 12 ? "PM" : "AM"}</strong>
+                  </div>
+                  <div className="date-labels" aria-hidden="true">
+                    <small>Day</small>
+                    <small>Month</small>
+                    <small>Hour</small>
+                    <small>Minute</small>
+                    <small>Time</small>
+                  </div>
+                </div>
+
+                <div className="note-form-card">
+                  <label htmlFor="todo-title">Title</label>
+                  <input
+                    ref={inputRef}
+                    id="todo-title"
+                    type="text"
+                    placeholder="Write the title"
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        addTodo();
+                      }
+                    }}
+                  />
+                  <label htmlFor="todo-note-preview">Note</label>
+                  <textarea id="todo-note-preview" placeholder="Write your important note" value={title} onChange={(event) => setTitle(event.target.value)} />
+                  <div className="form-options-row">
+                    <div>
+                      <span>Color</span>
+                      <div className="color-dots" aria-hidden="true">
+                        <i className="orange" />
+                        <i className="lime" />
+                        <i className="mint" />
+                      </div>
+                    </div>
+                    <div>
+                      <span>Alarm</span>
+                      <button type="button" className="toggle-pill" aria-label="Decorative alarm toggle" />
+                    </div>
+                  </div>
+                  <button type="button" onClick={addTodo} className="save-note-button">
+                    Save
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {activeView === "progress" && (
+              <section className="app-screen progress-screen" aria-label="Progress screen">
+                <div className="progress-hero-card">
+                  <div>
+                    <span>Your Progress</span>
+                    <strong>{stats.progress}%</strong>
+                    <p>{todaysSummary.caption}</p>
+                  </div>
+                  <div className="progress-ring compact" style={{ "--progress": `${stats.progress}%` } as CSSProperties}>
+                    <span>{stats.completed}</span>
+                    <small>done</small>
+                  </div>
+                </div>
+                <div className="stat-tile-grid">
+                  <StatCard label="Total" value={stats.total} tone="sage" />
+                  <StatCard label="Active" value={stats.active} tone="yellow" />
+                  <StatCard label="Done" value={stats.completed} tone="blue" />
+                </div>
+                <section className="mood-strip-card">
+                  <div className="section-heading compact">
+                    <span>Today&apos;s mood</span>
+                    <Sparkles size={16} />
+                  </div>
+                  <div className="mood-strip" aria-hidden="true">
+                    <DoodleMoodSticker mood="happy" size="small" />
+                    <DoodleMoodSticker mood="focused" size="small" />
+                    <DoodleMoodSticker mood="relaxed" size="small" />
+                    <DoodleMoodSticker mood="motivated" size="small" />
+                  </div>
+                </section>
+              </section>
+            )}
+          </div>
+
+          <BottomTaskBar activeView={activeView} onChange={setActiveView} onAdd={openAddView} />
+        </div>
       </section>
 
       <button type="button" onClick={focusNewTask} className="floating-add" aria-label="Focus add todo input">
         <Plus size={26} />
       </button>
     </main>
+  );
+}
+
+function BottomTaskBar({
+  activeView,
+  onChange,
+  onAdd,
+}: {
+  activeView: PlannerView;
+  onChange: (view: PlannerView) => void;
+  onAdd: () => void;
+}) {
+  return (
+    <nav className="bottom-taskbar" aria-label="Planner navigation">
+      <button type="button" onClick={() => onChange("calendar")} className={activeView === "calendar" ? "is-active" : ""}>
+        <CalendarDays size={18} />
+        <span>Calendar</span>
+      </button>
+      <button type="button" onClick={() => onChange("tasks")} className={activeView === "tasks" ? "is-active" : ""}>
+        <Check size={18} />
+        <span>Tasks</span>
+      </button>
+      <button type="button" onClick={onAdd} className={activeView === "add" ? "nav-add is-active" : "nav-add"} aria-label="Add todo">
+        <Plus size={25} />
+      </button>
+      <button type="button" onClick={() => onChange("progress")} className={activeView === "progress" ? "is-active" : ""}>
+        <Sparkles size={18} />
+        <span>Mood</span>
+      </button>
+    </nav>
   );
 }
 
@@ -470,7 +527,7 @@ function CalendarCard({ today, days, taskCount }: { today: Date; days: CalendarD
           <span className="section-kicker">Calendar</span>
           <h2>{today.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</h2>
         </div>
-        <CalendarDays size={22} />
+        <CalendarDays size={20} />
       </div>
       <div className="weekday-grid" aria-hidden="true">
         {["M", "T", "W", "T", "F", "S", "S"].map((day, index) => (
@@ -486,9 +543,169 @@ function CalendarCard({ today, days, taskCount }: { today: Date; days: CalendarD
       </div>
       <div className="calendar-note">
         <DoodleMoodSticker mood="relaxed" size="tiny" />
-        <p>{taskCount === 0 ? "No tasks yet — your page is fresh." : `${taskCount} planner notes are synced from your API.`}</p>
+        <p>{taskCount === 0 ? "Fresh planner page" : `${taskCount} synced notes`}</p>
       </div>
     </section>
+  );
+}
+
+function CompactTodoRow({
+  todo,
+  editingId,
+  editingTitle,
+  setEditingTitle,
+  onToggle,
+  onEdit,
+  onCancel,
+  onSave,
+  onDelete,
+}: TodoActionsProps) {
+  return (
+    <article className={todo.completed ? "compact-todo-row is-complete" : "compact-todo-row"}>
+      <button type="button" onClick={onToggle} className="tiny-check" aria-label={todo.completed ? "Mark as active" : "Mark as completed"}>
+        <Check size={13} />
+      </button>
+      <span className="timeline-line" aria-hidden="true" />
+      <div className="compact-row-content">
+        {editingId === todo.id ? (
+          <input
+            value={editingTitle}
+            onChange={(event) => setEditingTitle(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                onSave();
+              }
+
+              if (event.key === "Escape") {
+                onCancel();
+              }
+            }}
+            className="inline-edit-input"
+            autoFocus
+          />
+        ) : (
+          <h3>{todo.title}</h3>
+        )}
+        <p>{todo.completed ? "Done" : formatTaskMeta(todo)}</p>
+      </div>
+      <div className="compact-actions">
+        {editingId === todo.id ? (
+          <>
+            <button type="button" onClick={onCancel} aria-label="Cancel editing">
+              <X size={13} />
+            </button>
+            <button type="button" onClick={onSave} className="text-action">
+              Save
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" onClick={onEdit} aria-label="Edit todo">
+              <Pencil size={13} />
+            </button>
+            <button type="button" onClick={onDelete} aria-label="Delete todo">
+              <Trash2 size={13} />
+            </button>
+          </>
+        )}
+      </div>
+    </article>
+  );
+}
+
+interface TodoActionsProps {
+  todo: Todo;
+  editingId: number | null;
+  editingTitle: string;
+  setEditingTitle: (title: string) => void;
+  onToggle: () => void;
+  onEdit: () => void;
+  onCancel: () => void;
+  onSave: () => void;
+  onDelete: () => void;
+}
+
+function TaskCard({
+  todo,
+  mood,
+  category,
+  priority,
+  editingId,
+  editingTitle,
+  setEditingTitle,
+  onToggle,
+  onEdit,
+  onCancel,
+  onSave,
+  onDelete,
+}: TodoActionsProps & {
+  mood: DoodleMood;
+  category: { label: string; tone: string };
+  priority: { label: string; tone: string };
+}) {
+  return (
+    <article className={todo.completed ? "daily-task-card is-complete" : "daily-task-card"}>
+      <div className="task-accent-date">
+        <span>{todo.completed ? "Done" : "Now"}</span>
+      </div>
+      <div className="daily-task-body">
+        <div className="daily-task-top">
+          <DoodleMoodSticker mood={mood} size="tiny" />
+          <div className="task-badges">
+            <span className={`category-chip ${category.tone}`}>{category.label}</span>
+            <span className={`priority-chip ${priority.tone}`}>{priority.label}</span>
+          </div>
+        </div>
+        <div className="daily-task-title-row">
+          <button type="button" onClick={onToggle} className={todo.completed ? "tiny-check is-complete" : "tiny-check"} aria-label={todo.completed ? "Mark as active" : "Mark as completed"}>
+            <Check size={13} />
+          </button>
+          <div>
+            {editingId === todo.id ? (
+              <input
+                value={editingTitle}
+                onChange={(event) => setEditingTitle(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    onSave();
+                  }
+
+                  if (event.key === "Escape") {
+                    onCancel();
+                  }
+                }}
+                className="inline-edit-input"
+                autoFocus
+              />
+            ) : (
+              <h3>{todo.title}</h3>
+            )}
+            <p>{todo.completed ? "Completed with a happy little check" : formatTaskMeta(todo)}</p>
+          </div>
+        </div>
+        <div className="daily-task-actions">
+          {editingId === todo.id ? (
+            <>
+              <button type="button" onClick={onCancel} aria-label="Cancel editing">
+                <X size={14} />
+              </button>
+              <button type="button" onClick={onSave} className="text-action">
+                Save
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" onClick={onEdit} aria-label="Edit todo">
+                <Pencil size={14} />
+              </button>
+              <button type="button" onClick={onDelete} aria-label="Delete todo">
+                <Trash2 size={14} />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -501,7 +718,17 @@ function StatCard({ label, value, tone }: { label: string; value: number; tone: 
   );
 }
 
-function EmptyState({ filter }: { filter: Filter }) {
+function MiniEmptyState({ onAdd }: { onAdd: () => void }) {
+  return (
+    <div className="mini-empty-state">
+      <DoodleMoodSticker mood="sleepy" size="small" />
+      <p>No notes yet</p>
+      <button type="button" onClick={onAdd}>Add one</button>
+    </div>
+  );
+}
+
+function EmptyState({ filter, onAdd }: { filter: Filter; onAdd: () => void }) {
   return (
     <div className="empty-state">
       <EmptyDoodle />
@@ -511,6 +738,7 @@ function EmptyState({ filter }: { filter: Filter }) {
           ? "Add a first todo to pin a cute little plan to today."
           : "Try another filter or add a new task to keep planning."}
       </p>
+      <button type="button" onClick={onAdd}>Add Todo</button>
     </div>
   );
 }
