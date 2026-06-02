@@ -481,6 +481,10 @@ export default function TodoList() {
           <BottomTaskBar activeView={activeView} onChange={setActiveView} onAdd={openAddView} />
         </div>
       </section>
+
+      <button type="button" onClick={focusNewTask} className="floating-add" aria-label="Focus add todo input">
+        <Plus size={26} />
+      </button>
     </main>
   );
 }
