@@ -1,7 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Circle, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  CalendarDays,
+  Check,
+  Clock3,
+  Edit3,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
+import "./TodoList.css";
 
 type Filter = "all" | "active" | "completed";
+type DoodleMood = "happy" | "focused" | "excited" | "relaxed" | "sleepy" | "motivated";
 
 interface Todo {
   id: number;
@@ -13,6 +26,28 @@ interface Todo {
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5000/api/todos";
 
+const FILTER_LABELS: Record<Filter, string> = {
+  all: "All notes",
+  active: "In progress",
+  completed: "Done",
+};
+
+const MOODS: DoodleMood[] = ["happy", "focused", "excited", "relaxed", "sleepy", "motivated"];
+
+const CATEGORY_STYLES = [
+  { label: "Home", tone: "mint" },
+  { label: "Focus", tone: "sage" },
+  { label: "Diary", tone: "butter" },
+  { label: "Errand", tone: "sky" },
+  { label: "Care", tone: "peach" },
+];
+
+const PRIORITIES = [
+  { label: "Low", tone: "low" },
+  { label: "Soft", tone: "medium" },
+  { label: "High", tone: "high" },
+];
+
 export default function TodoList() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [title, setTitle] = useState("");
@@ -21,6 +56,7 @@ export default function TodoList() {
   const [editingTitle, setEditingTitle] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const fetchTodos = useCallback(async () => {
     setIsLoading(true);
@@ -49,16 +85,35 @@ export default function TodoList() {
     return () => window.clearTimeout(timeoutId);
   }, [fetchTodos]);
 
+  const today = useMemo(() => new Date(), []);
+
   const stats = useMemo(() => {
     const completed = todos.filter((todo) => todo.completed).length;
     const active = todos.length - completed;
+    const progress = todos.length === 0 ? 0 : Math.round((completed / todos.length) * 100);
 
     return {
       total: todos.length,
       active,
       completed,
+      progress,
     };
   }, [todos]);
+
+  const calendarDays = useMemo(() => buildCalendarDays(today), [today]);
+
+  const todaysSummary = useMemo(() => {
+    const nextTask = todos.find((todo) => !todo.completed);
+    return {
+      nextTask,
+      caption:
+        stats.active === 0 && stats.total > 0
+          ? "Everything feels tucked in for today."
+          : stats.active === 1
+            ? "One gentle task is waiting for you."
+            : `${stats.active} cozy tasks are waiting for you.`,
+    };
+  }, [stats.active, stats.total, todos]);
 
   const filteredTodos = useMemo(() => {
     if (filter === "active") {
@@ -76,6 +131,7 @@ export default function TodoList() {
     const trimmedTitle = title.trim();
 
     if (!trimmedTitle) {
+      inputRef.current?.focus();
       return;
     }
 
@@ -98,6 +154,7 @@ export default function TodoList() {
       setTodos((currentTodos) => [newTodo, ...currentTodos]);
       setTitle("");
       setFilter("all");
+      inputRef.current?.focus();
     } catch (fetchError) {
       console.error(fetchError);
       setError("เพิ่มรายการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
@@ -176,48 +233,85 @@ export default function TodoList() {
     setEditingTitle("");
   };
 
+  const focusNewTask = () => {
+    inputRef.current?.focus();
+    inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
   return (
-    <main className="min-h-screen bg-stone-50 text-neutral-950">
-      <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-10 px-4 py-8 sm:px-6 lg:px-8">
-        <header className="grid gap-6 rounded-[2rem] border border-neutral-200 bg-white p-6 shadow-[0_24px_80px_rgba(15,15,15,0.08)] sm:p-8 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
-          <div>
-            <div className="mb-8 flex h-12 w-12 items-center justify-center rounded-2xl border border-neutral-900 bg-neutral-950 text-lg font-semibold text-white">
-              T
+    <main className="planner-shell">
+      <div className="paper-grain" aria-hidden="true" />
+      <section className="planner-page">
+        <section className="calendar-first-layout" aria-label="Calendar planner dashboard">
+          <CalendarCard today={today} days={calendarDays} taskCount={stats.total} />
+
+          <div className="calendar-side-stack">
+            <section className="mood-card glass-card">
+              <div className="section-heading compact">
+                <span>Today&apos;s mood</span>
+                <Sparkles size={17} />
+              </div>
+              <DoodleMoodSticker mood="happy" size="medium" />
+              <h2>Soft focus</h2>
+              <p>Decorative mood stickers keep the diary feeling playful while your task data stays unchanged.</p>
+              <div className="mini-mood-row" aria-hidden="true">
+                <DoodleMoodSticker mood="focused" size="tiny" />
+                <DoodleMoodSticker mood="relaxed" size="tiny" />
+                <DoodleMoodSticker mood="excited" size="tiny" />
+              </div>
+            </section>
+
+            <section className="progress-card glass-card">
+              <div className="section-heading compact">
+                <span>Progress</span>
+                <span className="progress-percent">{stats.progress}%</span>
+              </div>
+              <div className="progress-ring" style={{ "--progress": `${stats.progress}%` } as CSSProperties}>
+                <span>{stats.completed}</span>
+                <small>done</small>
+              </div>
+              <div className="progress-track" aria-label={`${stats.progress}% completed`}>
+                <span style={{ width: `${stats.progress}%` }} />
+              </div>
+              <p>{stats.total === 0 ? "Add your first task to start the day." : todaysSummary.caption}</p>
+            </section>
+
+            <section className="summary-card glass-card">
+              <div className="section-heading compact">
+                <span>Today&apos;s summary</span>
+                <Clock3 size={17} />
+              </div>
+              <h2>{stats.active} active</h2>
+              <p>{todaysSummary.nextTask ? todaysSummary.nextTask.title : "Your task basket is peaceful right now."}</p>
+              <div className="summary-stack">
+                <span>{stats.total} total notes</span>
+                <span>{stats.completed} tucked away</span>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section className="workspace-grid">
+          <aside className="control-panel glass-card">
+            <div className="section-heading">
+              <div>
+                <span>Quick capture</span>
+                <h2>Add a tiny plan</h2>
+              </div>
+              <Edit3 size={18} />
             </div>
-            <p className="text-sm font-medium uppercase tracking-[0.35em] text-neutral-400">
-              Minimal Todo Workspace
-            </p>
-            <h1 className="mt-4 max-w-2xl text-4xl font-semibold tracking-[-0.05em] text-neutral-950 sm:text-6xl">
-              จัดการงานประจำวันอย่างเรียบง่ายและชัดเจน
-            </h1>
-            <p className="mt-5 max-w-xl text-base leading-7 text-neutral-500">
-              เพิ่ม แก้ไข ลบ และทำเครื่องหมายงานที่เสร็จแล้ว โดยทุกการเปลี่ยนแปลงถูกบันทึกผ่าน RESTful API ไปยัง PostgreSQL
-            </p>
-          </div>
-
-          <div className="grid grid-cols-3 gap-3 rounded-[1.75rem] border border-neutral-200 bg-neutral-50 p-3">
-            <StatCard label="ทั้งหมด" value={stats.total} />
-            <StatCard label="กำลังทำ" value={stats.active} />
-            <StatCard label="เสร็จแล้ว" value={stats.completed} />
-          </div>
-        </header>
-
-        <section className="grid flex-1 gap-6 lg:grid-cols-[0.72fr_1.28fr]">
-          <aside className="rounded-[2rem] border border-neutral-200 bg-white p-5 shadow-sm sm:p-6">
-            <h2 className="text-xl font-semibold tracking-[-0.03em]">เพิ่มรายการใหม่</h2>
-            <p className="mt-2 text-sm leading-6 text-neutral-500">
-              พิมพ์งานที่ต้องทำแล้วกด Enter หรือปุ่ม Add เพื่อบันทึกลงฐานข้อมูล
+            <p className="panel-copy">
+              Type a task and press Enter or Add. The same API create flow is preserved.
             </p>
 
-            <div className="mt-6 space-y-3">
-              <label htmlFor="todo-title" className="text-sm font-medium text-neutral-700">
-                Task name
-              </label>
-              <div className="flex gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-2 transition focus-within:border-neutral-950 focus-within:bg-white">
+            <div className="task-input-card">
+              <label htmlFor="todo-title">Task name</label>
+              <div className="task-input-row">
                 <input
+                  ref={inputRef}
                   id="todo-title"
                   type="text"
-                  placeholder="เช่น วางแผนงานสัปดาห์นี้"
+                  placeholder="Write a cozy task..."
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
                   onKeyDown={(event) => {
@@ -225,183 +319,344 @@ export default function TodoList() {
                       addTodo();
                     }
                   }}
-                  className="min-w-0 flex-1 bg-transparent px-3 text-sm text-neutral-950 outline-none placeholder:text-neutral-400"
                 />
-                <button
-                  onClick={addTodo}
-                  type="button"
-                  className="inline-flex h-11 items-center gap-2 rounded-xl bg-neutral-950 px-4 text-sm font-medium text-white transition hover:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-neutral-950 focus:ring-offset-2"
-                >
-                  <Plus size={17} />
+                <button onClick={addTodo} type="button" className="primary-button">
+                  <Plus size={18} />
                   Add
                 </button>
               </div>
             </div>
 
-            <div className="mt-8 grid gap-2">
+            <div className="filter-stack" aria-label="Todo filters">
               {(["all", "active", "completed"] as Filter[]).map((item) => (
                 <button
                   key={item}
                   type="button"
                   onClick={() => setFilter(item)}
-                  className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
-                    filter === item
-                      ? "border-neutral-950 bg-neutral-950 text-white"
-                      : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400"
-                  }`}
+                  className={filter === item ? "filter-button is-active" : "filter-button"}
                 >
-                  <span className="capitalize">{item}</span>
-                  <span>{item === "all" ? stats.total : item === "active" ? stats.active : stats.completed}</span>
+                  <span>{FILTER_LABELS[item]}</span>
+                  <strong>{item === "all" ? stats.total : item === "active" ? stats.active : stats.completed}</strong>
                 </button>
               ))}
             </div>
+
+            <div className="stats-row" aria-label="Todo statistics">
+              <StatCard label="Total" value={stats.total} tone="sage" />
+              <StatCard label="Active" value={stats.active} tone="yellow" />
+              <StatCard label="Done" value={stats.completed} tone="blue" />
+            </div>
           </aside>
 
-          <section className="rounded-[2rem] border border-neutral-200 bg-white p-4 shadow-sm sm:p-6">
-            <div className="mb-5 flex flex-col gap-3 border-b border-neutral-100 pb-5 sm:flex-row sm:items-center sm:justify-between">
+          <section className="todo-board glass-card">
+            <div className="board-header">
               <div>
-                <p className="text-sm font-medium uppercase tracking-[0.25em] text-neutral-400">Today</p>
-                <h2 className="mt-1 text-2xl font-semibold tracking-[-0.04em]">Todo list</h2>
+                <p className="section-kicker">Today</p>
+                <h2>Planner notes</h2>
               </div>
-              <button
-                type="button"
-                onClick={fetchTodos}
-                className="inline-flex items-center justify-center gap-2 rounded-full border border-neutral-200 px-4 py-2 text-sm font-medium text-neutral-600 transition hover:border-neutral-950 hover:text-neutral-950"
-              >
+              <button type="button" onClick={fetchTodos} className="ghost-button">
                 <RefreshCw size={16} />
                 Refresh
               </button>
             </div>
 
-            {error && (
-              <div className="mb-4 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-700">
-                {error}
-              </div>
-            )}
+            {error && <div className="error-banner">{error}</div>}
 
             {isLoading ? (
-              <div className="grid gap-3">
-                {[1, 2, 3].map((item) => (
-                  <div key={item} className="h-20 animate-pulse rounded-3xl bg-neutral-100" />
+              <div className="task-skeleton-grid" aria-label="Loading todos">
+                {[1, 2, 3, 4].map((item) => (
+                  <div key={item} className="task-skeleton" />
                 ))}
               </div>
             ) : filteredTodos.length === 0 ? (
-              <div className="flex min-h-72 flex-col items-center justify-center rounded-3xl border border-dashed border-neutral-200 bg-neutral-50 px-6 text-center">
-                <Circle className="text-neutral-300" size={44} strokeWidth={1.2} />
-                <h3 className="mt-5 text-xl font-semibold tracking-[-0.03em]">ยังไม่มีรายการในมุมมองนี้</h3>
-                <p className="mt-2 max-w-sm text-sm leading-6 text-neutral-500">
-                  เพิ่มงานใหม่หรือเปลี่ยนตัวกรองเพื่อดูรายการที่บันทึกไว้จาก API
-                </p>
-              </div>
+              <EmptyState filter={filter} />
             ) : (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {filteredTodos.map((todo) => (
-                  <article
-                    key={todo.id}
-                    className="group relative rounded-3xl border border-neutral-200 bg-white p-4 transition hover:border-neutral-400 hover:shadow-sm focus-within:ring-2 focus-within:ring-neutral-950 focus-within:ring-offset-2"
-                  >
-                    <div className="flex items-start gap-4">
-                      <button
-                        type="button"
-                        onClick={() => updateTodo(todo.id, { completed: !todo.completed })}
-                        className={`mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition ${
-                          todo.completed
-                            ? "border-neutral-950 bg-neutral-950 text-white"
-                            : "border-neutral-300 bg-white text-neutral-400 hover:border-neutral-950 hover:text-neutral-950"
-                        }`}
-                        aria-label={todo.completed ? "Mark as active" : "Mark as completed"}
-                      >
-                        <Check size={17} />
-                      </button>
+              <div className="task-grid">
+                {filteredTodos.map((todo) => {
+                  const category = getCategory(todo);
+                  const priority = getPriority(todo);
+                  const mood = getMood(todo);
 
-                      <div className="min-w-0 flex-1">
-                        {editingId === todo.id ? (
-                          <input
-                            value={editingTitle}
-                            onChange={(event) => setEditingTitle(event.target.value)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") {
-                                saveEditing();
-                              }
-
-                              if (event.key === "Escape") {
-                                cancelEditing();
-                              }
-                            }}
-                            className="w-full rounded-xl border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm font-medium text-neutral-950 outline-none focus:border-neutral-950"
-                            autoFocus
-                          />
-                        ) : (
-                          <h3
-                            className={`truncate text-base font-semibold tracking-[-0.02em] ${
-                              todo.completed ? "text-neutral-400 line-through" : "text-neutral-950"
-                            }`}
-                          >
-                            {todo.title}
-                          </h3>
-                        )}
-                        <p className="mt-2 text-xs font-medium uppercase tracking-[0.2em] text-neutral-400">
-                          {todo.completed ? "Completed" : "In progress"}
-                        </p>
+                  return (
+                    <article key={todo.id} className={todo.completed ? "task-card is-complete" : "task-card"}>
+                      <div className="task-card-header">
+                        <DoodleMoodSticker mood={mood} size="small" />
+                        <div className="task-badges">
+                          <span className={`category-chip ${category.tone}`}>{category.label}</span>
+                          <span className={`priority-chip ${priority.tone}`}>{priority.label} priority</span>
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="mt-5 flex items-center justify-end gap-2">
-                      {editingId === todo.id ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={cancelEditing}
-                            className="rounded-full border border-neutral-200 p-2 text-neutral-500 transition hover:border-neutral-950 hover:text-neutral-950"
-                            aria-label="Cancel editing"
-                          >
-                            <X size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={saveEditing}
-                            className="rounded-full bg-neutral-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800"
-                          >
-                            Save
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => startEditing(todo)}
-                            className="rounded-full border border-neutral-200 p-2 text-neutral-500 transition hover:border-neutral-950 hover:text-neutral-950"
-                            aria-label="Edit todo"
-                          >
-                            <Pencil size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => deleteTodo(todo.id)}
-                            className="rounded-full border border-neutral-200 p-2 text-neutral-500 transition hover:border-neutral-950 hover:bg-neutral-950 hover:text-white"
-                            aria-label="Delete todo"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </article>
-                ))}
+                      <div className="task-main-row">
+                        <button
+                          type="button"
+                          onClick={() => updateTodo(todo.id, { completed: !todo.completed })}
+                          className={todo.completed ? "complete-button is-complete" : "complete-button"}
+                          aria-label={todo.completed ? "Mark as active" : "Mark as completed"}
+                        >
+                          <Check size={18} />
+                        </button>
+
+                        <div className="task-content">
+                          {editingId === todo.id ? (
+                            <input
+                              value={editingTitle}
+                              onChange={(event) => setEditingTitle(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  saveEditing();
+                                }
+
+                                if (event.key === "Escape") {
+                                  cancelEditing();
+                                }
+                              }}
+                              className="edit-input"
+                              autoFocus
+                            />
+                          ) : (
+                            <h3>{todo.title}</h3>
+                          )}
+                          <p>{todo.completed ? "Completed with a happy little check" : formatTaskMeta(todo)}</p>
+                        </div>
+                      </div>
+
+                      <div className="task-footer">
+                        <span className="task-status-dot" />
+                        <span>{todo.completed ? "Done" : "In progress"}</span>
+                        <div className="task-actions">
+                          {editingId === todo.id ? (
+                            <>
+                              <button type="button" onClick={cancelEditing} className="icon-button" aria-label="Cancel editing">
+                                <X size={16} />
+                              </button>
+                              <button type="button" onClick={saveEditing} className="save-button">
+                                Save
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button type="button" onClick={() => startEditing(todo)} className="icon-button" aria-label="Edit todo">
+                                <Pencil size={16} />
+                              </button>
+                              <button type="button" onClick={() => deleteTodo(todo.id)} className="icon-button danger" aria-label="Delete todo">
+                                <Trash2 size={16} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             )}
           </section>
         </section>
       </section>
+
+      <button type="button" onClick={focusNewTask} className="floating-add" aria-label="Focus add todo input">
+        <Plus size={26} />
+      </button>
     </main>
   );
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
+function CalendarCard({ today, days, taskCount }: { today: Date; days: CalendarDay[]; taskCount: number }) {
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white px-3 py-4 text-center">
-      <p className="text-2xl font-semibold tracking-[-0.04em] text-neutral-950">{value}</p>
-      <p className="mt-1 text-xs font-medium text-neutral-400">{label}</p>
+    <section className="calendar-card glass-card">
+      <div className="calendar-topline">
+        <div>
+          <span className="section-kicker">Calendar</span>
+          <h2>{today.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</h2>
+        </div>
+        <CalendarDays size={22} />
+      </div>
+      <div className="weekday-grid" aria-hidden="true">
+        {["M", "T", "W", "T", "F", "S", "S"].map((day, index) => (
+          <span key={`${day}-${index}`}>{day}</span>
+        ))}
+      </div>
+      <div className="calendar-grid">
+        {days.map((day) => (
+          <span key={day.key} className={`${day.isOutside ? "is-outside" : ""} ${day.isToday ? "is-today" : ""}`}>
+            {day.date.getDate()}
+          </span>
+        ))}
+      </div>
+      <div className="calendar-note">
+        <DoodleMoodSticker mood="relaxed" size="tiny" />
+        <p>{taskCount === 0 ? "No tasks yet — your page is fresh." : `${taskCount} planner notes are synced from your API.`}</p>
+      </div>
+    </section>
+  );
+}
+
+function StatCard({ label, value, tone }: { label: string; value: number; tone: "sage" | "yellow" | "blue" }) {
+  return (
+    <div className={`stat-card ${tone}`}>
+      <p>{value}</p>
+      <span>{label}</span>
     </div>
+  );
+}
+
+function EmptyState({ filter }: { filter: Filter }) {
+  return (
+    <div className="empty-state">
+      <EmptyDoodle />
+      <h3>{filter === "all" ? "Your planner page is blank" : "No notes in this view"}</h3>
+      <p>
+        {filter === "all"
+          ? "Add a first todo to pin a cute little plan to today."
+          : "Try another filter or add a new task to keep planning."}
+      </p>
+    </div>
+  );
+}
+
+interface CalendarDay {
+  key: string;
+  date: Date;
+  isOutside: boolean;
+  isToday: boolean;
+}
+
+function buildCalendarDays(baseDate: Date): CalendarDay[] {
+  const year = baseDate.getFullYear();
+  const month = baseDate.getMonth();
+  const firstOfMonth = new Date(year, month, 1);
+  const mondayIndex = (firstOfMonth.getDay() + 6) % 7;
+  const start = new Date(year, month, 1 - mondayIndex);
+
+  return Array.from({ length: 35 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+
+    return {
+      key: date.toISOString(),
+      date,
+      isOutside: date.getMonth() !== month,
+      isToday: date.toDateString() === baseDate.toDateString(),
+    };
+  });
+}
+
+function formatTaskMeta(todo: Todo) {
+  if (!todo.created_at) {
+    return "New planner note";
+  }
+
+  const createdAt = new Date(todo.created_at);
+
+  if (Number.isNaN(createdAt.getTime())) {
+    return "Saved in your planner";
+  }
+
+  return `Added ${createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+}
+
+function getCategory(todo: Todo) {
+  return CATEGORY_STYLES[Math.abs(todo.id) % CATEGORY_STYLES.length];
+}
+
+function getPriority(todo: Todo) {
+  const urgentWords = ["urgent", "important", "today", "now", "ด่วน", "สำคัญ"];
+  const hasUrgentWord = urgentWords.some((word) => todo.title.toLowerCase().includes(word));
+
+  if (hasUrgentWord) {
+    return PRIORITIES[2];
+  }
+
+  return PRIORITIES[Math.abs(todo.id + todo.title.length) % PRIORITIES.length];
+}
+
+function getMood(todo: Todo): DoodleMood {
+  if (todo.completed) {
+    return "happy";
+  }
+
+  return MOODS[Math.abs(todo.id + todo.title.length) % MOODS.length];
+}
+
+function DoodleMoodSticker({ mood, size }: { mood: DoodleMood; size: "tiny" | "small" | "medium" | "large" }) {
+  const moodClass = `doodle-sticker ${mood} ${size}`;
+
+  return (
+    <svg className={moodClass} viewBox="0 0 120 120" role="img" aria-label={`${mood} doodle mood`}>
+      <path className="blob-shadow" d="M24 96c15 16 61 18 78-2 14-17 8-55-5-70C82 6 38 8 22 25 5 43 8 80 24 96Z" />
+      <path className="blob" d="M22 92c16 19 61 20 77 1 15-18 9-53-4-68C80 7 40 8 23 25 6 42 7 76 22 92Z" />
+      {mood === "happy" && (
+        <>
+          <circle className="eye" cx="43" cy="49" r="5" />
+          <circle className="eye" cx="75" cy="48" r="5" />
+          <path className="mouth" d="M39 67c8 14 32 15 42-1" />
+          <circle className="cheek" cx="31" cy="63" r="5" />
+          <circle className="cheek" cx="89" cy="62" r="5" />
+        </>
+      )}
+      {mood === "focused" && (
+        <>
+          <path className="brow" d="M34 39c7-6 16-7 23-4" />
+          <path className="brow" d="M70 36c8-3 16-1 21 5" />
+          <circle className="eye" cx="47" cy="53" r="5" />
+          <circle className="eye" cx="75" cy="54" r="5" />
+          <path className="mouth" d="M45 75c9-7 24-7 33 0" />
+        </>
+      )}
+      {mood === "excited" && (
+        <>
+          <rect className="eye" x="38" y="44" width="11" height="13" rx="4" />
+          <rect className="eye" x="72" y="44" width="11" height="13" rx="4" />
+          <path className="open-mouth" d="M47 67c8-12 27-11 33 1 3 13-8 23-19 22-10-1-18-10-14-23Z" />
+          <path className="tongue" d="M53 78c7 5 15 5 22 0" />
+          <path className="star" d="M96 25l5 10 11 4-10 5-4 11-6-10-11-4 10-6Z" />
+        </>
+      )}
+      {mood === "relaxed" && (
+        <>
+          <path className="closed-eye" d="M36 50c6 6 15 6 21 0" />
+          <path className="closed-eye" d="M69 50c6 6 15 6 21 0" />
+          <path className="mouth" d="M42 69c9 13 30 13 39 0" />
+          <circle className="cheek" cx="34" cy="63" r="5" />
+          <circle className="cheek" cx="88" cy="63" r="5" />
+        </>
+      )}
+      {mood === "sleepy" && (
+        <>
+          <path className="closed-eye" d="M35 52c5 4 13 4 18 0" />
+          <path className="closed-eye" d="M68 52c5 4 13 4 18 0" />
+          <path className="mouth" d="M48 76c6-5 17-5 23 0" />
+          <path className="sleep-mark" d="M87 25h15L88 43h16" />
+        </>
+      )}
+      {mood === "motivated" && (
+        <>
+          <path className="brow" d="M34 38c7-5 15-6 22-1" />
+          <path className="brow" d="M70 37c8-4 16-2 22 4" />
+          <circle className="eye" cx="45" cy="52" r="5" />
+          <circle className="eye" cx="77" cy="52" r="5" />
+          <path className="open-mouth" d="M45 68c8-10 29-10 35 2 1 12-9 21-20 20-11-1-18-10-15-22Z" />
+          <path className="tongue" d="M54 80c7 4 14 4 21-1" />
+          <path className="leaf-deco" d="M88 18c12-6 21-4 26 4-6 10-17 12-27 5" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+function EmptyDoodle() {
+  return (
+    <svg className="empty-doodle" viewBox="0 0 220 170" role="img" aria-label="Hand drawn empty planner illustration">
+      <path className="empty-paper" d="M45 28c38-12 88-10 125 0 10 32 7 74-5 110-34 13-82 13-119 2C35 105 34 63 45 28Z" />
+      <path className="empty-line" d="M70 68c30-5 57-4 85 1" />
+      <path className="empty-line short" d="M72 91c20-4 43-4 67 0" />
+      <path className="empty-line" d="M69 114c27 4 56 4 86-2" />
+      <circle className="empty-check" cx="52" cy="70" r="8" />
+      <circle className="empty-check" cx="52" cy="94" r="8" />
+      <circle className="empty-check" cx="52" cy="117" r="8" />
+      <path className="empty-spark" d="M177 43l6 12 13 4-12 6-5 13-7-12-12-5 12-7Z" />
+      <path className="empty-heart" d="M34 42c-10-13 10-26 19-9 11-17 31 0 18 14L53 66Z" />
+    </svg>
   );
 }
