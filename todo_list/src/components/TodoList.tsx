@@ -4,7 +4,6 @@ import {
   Check,
   Clock3,
   Edit3,
-  Leaf,
   Pencil,
   Plus,
   RefreshCw,
@@ -105,11 +104,8 @@ export default function TodoList() {
 
   const todaysSummary = useMemo(() => {
     const nextTask = todos.find((todo) => !todo.completed);
-    const completedToday = todos.filter((todo) => todo.completed).slice(0, 2);
-
     return {
       nextTask,
-      completedToday,
       caption:
         stats.active === 0 && stats.total > 0
           ? "Everything feels tucked in for today."
@@ -246,72 +242,53 @@ export default function TodoList() {
     <main className="planner-shell">
       <div className="paper-grain" aria-hidden="true" />
       <section className="planner-page">
-        <header className="hero-card glass-card">
-          <div className="hero-copy">
-            <div className="eyebrow-pill">
-              <Leaf size={16} />
-              Doodle planner
-            </div>
-            <p className="date-line">{formatLongDate(today)}</p>
-            <h1>Good morning, let&apos;s plan a gentle day.</h1>
-            <p className="hero-description">
-              A cozy diary-inspired space for your existing todos, complete with calendar rhythm,
-              progress tracking, and soft doodle companions.
-            </p>
-          </div>
-
-          <div className="hero-sticker" aria-label="Decorative motivated doodle planner character">
-            <DoodleMoodSticker mood="motivated" size="large" />
-            <span className="sparkle sparkle-one" />
-            <span className="sparkle sparkle-two" />
-          </div>
-        </header>
-
-        <section className="dashboard-grid" aria-label="Planner dashboard">
+        <section className="calendar-first-layout" aria-label="Calendar planner dashboard">
           <CalendarCard today={today} days={calendarDays} taskCount={stats.total} />
 
-          <section className="mood-card glass-card">
-            <div className="section-heading compact">
-              <span>Today&apos;s mood</span>
-              <Sparkles size={17} />
-            </div>
-            <DoodleMoodSticker mood="happy" size="medium" />
-            <h2>Soft focus mode</h2>
-            <p>Decorative mood stickers keep the diary feeling playful while your task data stays unchanged.</p>
-            <div className="mini-mood-row" aria-hidden="true">
-              <DoodleMoodSticker mood="focused" size="tiny" />
-              <DoodleMoodSticker mood="relaxed" size="tiny" />
-              <DoodleMoodSticker mood="excited" size="tiny" />
-            </div>
-          </section>
+          <div className="calendar-side-stack">
+            <section className="mood-card glass-card">
+              <div className="section-heading compact">
+                <span>Today&apos;s mood</span>
+                <Sparkles size={17} />
+              </div>
+              <DoodleMoodSticker mood="happy" size="medium" />
+              <h2>Soft focus</h2>
+              <p>Decorative mood stickers keep the diary feeling playful while your task data stays unchanged.</p>
+              <div className="mini-mood-row" aria-hidden="true">
+                <DoodleMoodSticker mood="focused" size="tiny" />
+                <DoodleMoodSticker mood="relaxed" size="tiny" />
+                <DoodleMoodSticker mood="excited" size="tiny" />
+              </div>
+            </section>
 
-          <section className="progress-card glass-card">
-            <div className="section-heading compact">
-              <span>Progress</span>
-              <span className="progress-percent">{stats.progress}%</span>
-            </div>
-            <div className="progress-ring" style={{ "--progress": `${stats.progress}%` } as CSSProperties}>
-              <span>{stats.completed}</span>
-              <small>done</small>
-            </div>
-            <div className="progress-track" aria-label={`${stats.progress}% completed`}>
-              <span style={{ width: `${stats.progress}%` }} />
-            </div>
-            <p>{stats.total === 0 ? "Add your first task to start the day." : todaysSummary.caption}</p>
-          </section>
+            <section className="progress-card glass-card">
+              <div className="section-heading compact">
+                <span>Progress</span>
+                <span className="progress-percent">{stats.progress}%</span>
+              </div>
+              <div className="progress-ring" style={{ "--progress": `${stats.progress}%` } as CSSProperties}>
+                <span>{stats.completed}</span>
+                <small>done</small>
+              </div>
+              <div className="progress-track" aria-label={`${stats.progress}% completed`}>
+                <span style={{ width: `${stats.progress}%` }} />
+              </div>
+              <p>{stats.total === 0 ? "Add your first task to start the day." : todaysSummary.caption}</p>
+            </section>
 
-          <section className="summary-card glass-card">
-            <div className="section-heading compact">
-              <span>Today&apos;s summary</span>
-              <Clock3 size={17} />
-            </div>
-            <h2>{stats.active} active</h2>
-            <p>{todaysSummary.nextTask ? todaysSummary.nextTask.title : "Your task basket is peaceful right now."}</p>
-            <div className="summary-stack">
-              <span>{stats.total} total notes</span>
-              <span>{stats.completed} tucked away</span>
-            </div>
-          </section>
+            <section className="summary-card glass-card">
+              <div className="section-heading compact">
+                <span>Today&apos;s summary</span>
+                <Clock3 size={17} />
+              </div>
+              <h2>{stats.active} active</h2>
+              <p>{todaysSummary.nextTask ? todaysSummary.nextTask.title : "Your task basket is peaceful right now."}</p>
+              <div className="summary-stack">
+                <span>{stats.total} total notes</span>
+                <span>{stats.completed} tucked away</span>
+              </div>
+            </section>
+          </div>
         </section>
 
         <section className="workspace-grid">
@@ -562,14 +539,6 @@ function buildCalendarDays(baseDate: Date): CalendarDay[] {
       isOutside: date.getMonth() !== month,
       isToday: date.toDateString() === baseDate.toDateString(),
     };
-  });
-}
-
-function formatLongDate(date: Date) {
-  return date.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
   });
 }
 
