@@ -251,8 +251,6 @@ export default function TodoList() {
     window.setTimeout(() => inputRef.current?.focus(), 120);
   };
 
-  const focusNewTask = openAddView;
-
   return (
     <main className="planner-shell">
       <div className="paper-grain" aria-hidden="true" />
@@ -480,9 +478,13 @@ export default function TodoList() {
             )}
           </div>
 
-          <BottomTaskBar activeView={activeView} onChange={setActiveView} onAdd={focusNewTask} />
+          <BottomTaskBar activeView={activeView} onChange={setActiveView} onAdd={openAddView} />
         </div>
       </section>
+
+      <button type="button" onClick={focusNewTask} className="floating-add" aria-label="Focus add todo input">
+        <Plus size={26} />
+      </button>
     </main>
   );
 }
