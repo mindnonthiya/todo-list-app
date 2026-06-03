@@ -1001,6 +1001,7 @@ select, input, textarea { border: 1px solid var(--border); border-radius: 14px; 
     border-radius: 20px;
     padding: 6px;
   }
+}
 
   .bottom-nav button {
     min-height: 48px;
