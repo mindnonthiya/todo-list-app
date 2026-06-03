@@ -32,7 +32,6 @@
   "priority": "Priority",
   "category": "Category",
   "title": "Title",
-  "description": "Description",
   "date": "Date",
   "time": "Time",
   "dueDate": "Due Date",
@@ -52,7 +51,6 @@
   "formIntroTitle": "Capture the next commitment clearly.",
   "formIntroBody": "Add context, due date, color, priority, and reminder details so your planner stays actionable.",
   "titlePlaceholder": "Prepare weekly roadmap",
-  "descriptionPlaceholder": "Add supporting details, links, or acceptance criteria.",
   "monthPlanner": "Month planner",
   "taskList": "Task list",
   "noTasksFound": "No tasks found",
@@ -100,5 +98,7 @@
   "deleteError": "Unable to delete the task. Please try again.",
   "previousMonth": "Previous month",
   "nextMonth": "Next month",
-  "close": "Close"
+  "close": "Close",
+  "note": "Note",
+  "notePlaceholder": "Add supporting details, links, or acceptance criteria."
 }
