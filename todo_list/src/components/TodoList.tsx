@@ -27,9 +27,6 @@ import {
   UserCircle,
   X,
 } from "lucide-react";
-import { type TranslationKey } from "../contexts/language-core";
-import { useLanguage } from "../hooks/useLanguage";
-import { useTheme } from "../hooks/useTheme";
 import "./TodoList.css";
 
 type Filter = "all" | "active" | "completed";
@@ -65,16 +62,6 @@ interface CalendarDay {
 }
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5000/api/todos";
-const todayKey = toDateInputValue(new Date());
-
-const COLOR_OPTIONS: Array<{ value: TaskColor; key: "green" | "blue" | "yellow" | "orange" | "purple" | "red" }> = [
-  { value: "green", key: "green" },
-  { value: "blue", key: "blue" },
-  { value: "yellow", key: "yellow" },
-  { value: "orange", key: "orange" },
-  { value: "purple", key: "purple" },
-  { value: "red", key: "red" },
-];
 
 const FILTER_LABELS: Record<Filter, string> = {
   all: "All",
@@ -123,8 +110,6 @@ const priorityRank: Record<Priority, number> = { low: 1, medium: 2, high: 3 };
 const todayKey = toDateInputValue(new Date());
 
 export default function TodoList() {
-  const { t, language, setLanguage } = useLanguage();
-  const { theme, toggleTheme } = useTheme();
   const [todos, setTodos] = useState<Todo[]>([]);
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
@@ -149,8 +134,6 @@ export default function TodoList() {
   const [selectedMood, setSelectedMood] = useState<Mood>("calm");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const dateLocale = language === "th" ? "th-TH" : "en-US";
-
   const fetchTodos = useCallback(async () => {
     setIsLoading(true);
     setError("");
@@ -170,7 +153,7 @@ export default function TodoList() {
     } finally {
       setIsLoading(false);
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -350,26 +333,11 @@ export default function TodoList() {
 
     if (!editingId || !trimmedTitle) return;
 
-  const saveEditDialog = useCallback(async () => {
-    if (!activeTodo || !editForm.title.trim()) return;
-    const alarmDateTime = editForm.alarmEnabled ? `${editForm.alarmDate}T${editForm.alarmTime}` : null;
-    const updatedTodo = await updateTodo(activeTodo.id, {
-      title: editForm.title.trim(),
-      description: editForm.description.trim(),
-      note: editForm.description.trim(),
-      color: editForm.color,
-      priority: editForm.priority,
-      category: editForm.category,
-      dueDate: editForm.dueDate,
-      dueTime: editForm.dueTime,
-      alarm: editForm.alarmEnabled,
-      alarmEnabled: editForm.alarmEnabled,
-      alarmDateTime,
-    });
+    const updatedTodo = await updateTodo(editingId, { title: trimmedTitle });
 
     if (updatedTodo) {
-      setDialogMode(null);
-      setActiveTodo(null);
+      setEditingId(null);
+      setEditingTitle("");
     }
   }, [editingId, editingTitle, updateTodo]);
 
@@ -428,14 +396,6 @@ export default function TodoList() {
                 </div>
               )}
             </div>
-            {profileOpen && (
-              <UserMenu
-                onClose={() => setProfileOpen(false)}
-                onProfile={() => { setActiveView("profile"); setProfileOpen(false); }}
-                onToggleTheme={toggleTheme}
-                themeLabel={theme === "dark" ? t("light") : t("dark")}
-              />
-            )}
           </header>
 
           {error && <div className="app-error" role="alert">{error}</div>}
