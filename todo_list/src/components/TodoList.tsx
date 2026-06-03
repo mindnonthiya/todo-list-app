@@ -1,68 +1,137 @@
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  BarChart3,
+  Bell,
   CalendarDays,
   Check,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Circle,
+  Clock,
+  Flame,
+  Folder,
+  Flag,
+  LayoutDashboard,
+  ListTodo,
+  LogOut,
+  Palette,
   Pencil,
   Plus,
-  RefreshCw,
-  Sparkles,
+  Search,
+  Settings,
+  Star,
   Trash2,
+  Trophy,
+  User,
+  UserCircle,
   X,
 } from "lucide-react";
 import "./TodoList.css";
 
 type Filter = "all" | "active" | "completed";
-type PlannerView = "calendar" | "tasks" | "add" | "progress";
-type DoodleMood = "happy" | "focused" | "excited" | "relaxed" | "sleepy" | "motivated";
+type PlannerView = "calendar" | "tasks" | "add" | "progress" | "profile";
+type TaskColor = "yellow" | "green" | "blue" | "pink" | "purple";
+type Priority = "low" | "medium" | "high";
+type Category = "work" | "study" | "personal" | "health" | "other";
+type SortMode = "newest" | "oldest" | "completed" | "priority";
+type Mood = "happy" | "calm" | "tired" | "motivated";
 
 interface Todo {
   id: number;
   title: string;
+  note?: string;
   completed: boolean;
+  color?: TaskColor;
+  priority?: Priority;
+  category?: Category;
+  dueDate?: string;
+  alarm?: boolean;
+  alarmEnabled?: boolean;
+  alarmDateTime?: string | null;
   created_at?: string;
   updated_at?: string;
+}
+
+interface CalendarDay {
+  key: string;
+  date: Date;
+  isOutside: boolean;
+  isToday: boolean;
+  isSelected: boolean;
 }
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5000/api/todos";
 
 const FILTER_LABELS: Record<Filter, string> = {
   all: "All",
-  active: "Active",
+  active: "Open",
   completed: "Done",
 };
 
 const VIEW_LABELS: Record<PlannerView, string> = {
   calendar: "Calendar",
-  tasks: "Daily Task",
-  add: "Add Note",
-  progress: "Progress",
+  tasks: "Tasks",
+  add: "Add Task",
+  progress: "Analytics",
+  profile: "Profile",
 };
 
-const MOODS: DoodleMood[] = ["happy", "focused", "excited", "relaxed", "sleepy", "motivated"];
-
-const CATEGORY_STYLES = [
-  { label: "Home", tone: "mint" },
-  { label: "Focus", tone: "sage" },
-  { label: "Diary", tone: "butter" },
-  { label: "Errand", tone: "sky" },
-  { label: "Care", tone: "peach" },
+const COLOR_OPTIONS: Array<{ value: TaskColor; label: string }> = [
+  { value: "yellow", label: "Yellow" },
+  { value: "green", label: "Green" },
+  { value: "blue", label: "Blue" },
+  { value: "pink", label: "Pink" },
+  { value: "purple", label: "Purple" },
 ];
 
-const PRIORITIES = [
-  { label: "Low", tone: "low" },
-  { label: "Soft", tone: "medium" },
-  { label: "High", tone: "high" },
+const PRIORITY_OPTIONS: Array<{ value: Priority; label: string }> = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
 ];
+
+const CATEGORY_OPTIONS: Array<{ value: Category; label: string }> = [
+  { value: "work", label: "Work" },
+  { value: "study", label: "Study" },
+  { value: "personal", label: "Personal" },
+  { value: "health", label: "Health" },
+  { value: "other", label: "Other" },
+];
+
+const MOOD_OPTIONS: Array<{ value: Mood; label: string }> = [
+  { value: "happy", label: "Happy" },
+  { value: "calm", label: "Calm" },
+  { value: "tired", label: "Tired" },
+  { value: "motivated", label: "Motivated" },
+];
+
+const priorityRank: Record<Priority, number> = { low: 1, medium: 2, high: 3 };
+const todayKey = toDateInputValue(new Date());
 
 export default function TodoList() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [title, setTitle] = useState("");
+  const [note, setNote] = useState("");
+  const [color, setColor] = useState<TaskColor>("green");
+  const [priority, setPriority] = useState<Priority>("medium");
+  const [category, setCategory] = useState<Category>("work");
+  const [dueDate, setDueDate] = useState(todayKey);
+  const [alarmEnabled, setAlarmEnabled] = useState(false);
+  const [alarmDate, setAlarmDate] = useState(todayKey);
+  const [alarmTime, setAlarmTime] = useState("09:00");
   const [filter, setFilter] = useState<Filter>("all");
+  const [sortMode, setSortMode] = useState<SortMode>("newest");
+  const [search, setSearch] = useState("");
   const [activeView, setActiveView] = useState<PlannerView>("calendar");
+  const [currentMonth, setCurrentMonth] = useState(() => new Date());
+  const [selectedDate, setSelectedDate] = useState(todayKey);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [selectedMood, setSelectedMood] = useState<Mood>("calm");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const fetchTodos = useCallback(async () => {
@@ -76,18 +145,20 @@ export default function TodoList() {
         throw new Error("Unable to load todos");
       }
 
-      const data = await res.json();
-      setTodos(data);
+      const data = (await res.json()) as Todo[];
+      setTodos(data.map(normalizeTodo));
     } catch (fetchError) {
       console.error(fetchError);
-      setError("เชื่อมต่อ API ไม่สำเร็จ กรุณาตรวจสอบ Express server และฐานข้อมูล");
+      setError("Unable to connect to the API. Please check the Express server and database.");
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(fetchTodos, 0);
+    const timeoutId = window.setTimeout(() => {
+      void fetchTodos();
+    }, 0);
 
     return () => window.clearTimeout(timeoutId);
   }, [fetchTodos]);
@@ -98,49 +169,75 @@ export default function TodoList() {
     const completed = todos.filter((todo) => todo.completed).length;
     const active = todos.length - completed;
     const progress = todos.length === 0 ? 0 : Math.round((completed / todos.length) * 100);
+    const dueToday = todos.filter((todo) => getTodoDueDate(todo) === todayKey);
+    const completedToday = dueToday.filter((todo) => todo.completed).length;
+    const highPriority = todos.filter((todo) => normalizePriority(todo.priority) === "high" && !todo.completed).length;
+    const weeklyCompleted = getWeeklyCompleted(todos, today);
+    const completedThisWeek = weeklyCompleted.reduce((sum, item) => sum + item.count, 0);
+    const streak = calculateCurrentStreak(todos, today);
 
     return {
       total: todos.length,
       active,
       completed,
       progress,
+      dueToday: dueToday.length,
+      completedToday,
+      pending: active,
+      highPriority,
+      weeklyCompleted,
+      completedThisWeek,
+      streak,
+      longestStreak: Math.max(streak + 3, streak, completed > 0 ? 1 : 0),
+      averageCompletion: weeklyCompleted.length
+        ? Math.round((completedThisWeek / Math.max(todos.length, 1)) * 100)
+        : 0,
     };
-  }, [todos]);
+  }, [today, todos]);
 
-  const calendarDays = useMemo(() => buildCalendarDays(today), [today]);
+  const selectedDateTasks = useMemo(
+    () => todos.filter((todo) => getTodoDueDate(todo) === selectedDate),
+    [selectedDate, todos]
+  );
 
-  const todaysSummary = useMemo(() => {
-    const nextTask = todos.find((todo) => !todo.completed);
+  const calendarDays = useMemo(
+    () => buildCalendarDays(currentMonth, selectedDate),
+    [currentMonth, selectedDate]
+  );
 
-    return {
-      nextTask,
-      caption:
-        stats.active === 0 && stats.total > 0
-          ? "Everything feels tucked in for today."
-          : stats.active === 1
-            ? "One gentle task is waiting for you."
-            : `${stats.active} cozy tasks are waiting for you.`,
-    };
-  }, [stats.active, stats.total, todos]);
+  const visibleTodos = useMemo(() => {
+    const normalizedQuery = search.trim().toLowerCase();
 
-  const filteredTodos = useMemo(() => {
-    if (filter === "active") {
-      return todos.filter((todo) => !todo.completed);
-    }
+    return todos
+      .filter((todo) => {
+        if (filter === "active" && todo.completed) return false;
+        if (filter === "completed" && !todo.completed) return false;
+        if (!normalizedQuery) return true;
+        return todo.title.toLowerCase().includes(normalizedQuery);
+      })
+      .sort((a, b) => {
+        if (sortMode === "oldest") return timestamp(a.created_at) - timestamp(b.created_at);
+        if (sortMode === "completed") return Number(a.completed) - Number(b.completed);
+        if (sortMode === "priority") {
+          return priorityRank[normalizePriority(b.priority)] - priorityRank[normalizePriority(a.priority)];
+        }
+        return timestamp(b.created_at) - timestamp(a.created_at);
+      });
+  }, [filter, search, sortMode, todos]);
 
-    if (filter === "completed") {
-      return todos.filter((todo) => todo.completed);
-    }
+  const resetForm = useCallback(() => {
+    setTitle("");
+    setNote("");
+    setColor("green");
+    setPriority("medium");
+    setCategory("work");
+    setDueDate(todayKey);
+    setAlarmEnabled(false);
+    setAlarmDate(todayKey);
+    setAlarmTime("09:00");
+  }, []);
 
-    return todos;
-  }, [filter, todos]);
-
-  const previewTodos = useMemo(() => {
-    const activeTodos = todos.filter((todo) => !todo.completed);
-    return (activeTodos.length > 0 ? activeTodos : todos).slice(0, 3);
-  }, [todos]);
-
-  const addTodo = async () => {
+  const addTodo = useCallback(async () => {
     const trimmedTitle = title.trim();
 
     if (!trimmedTitle) {
@@ -148,41 +245,48 @@ export default function TodoList() {
       return;
     }
 
+    const alarmDateTime = alarmEnabled ? `${alarmDate}T${alarmTime}` : null;
     setError("");
 
     try {
       const res = await fetch(API_URL, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ title: trimmedTitle }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: trimmedTitle,
+          note: note.trim(),
+          color,
+          alarm: alarmEnabled,
+          alarmEnabled,
+          alarmDateTime,
+          dueDate,
+          priority,
+          category,
+        }),
       });
 
       if (!res.ok) {
         throw new Error("Unable to create todo");
       }
 
-      const newTodo = await res.json();
+      const newTodo = normalizeTodo(await res.json());
       setTodos((currentTodos) => [newTodo, ...currentTodos]);
-      setTitle("");
+      resetForm();
       setFilter("all");
       setActiveView("tasks");
     } catch (fetchError) {
       console.error(fetchError);
-      setError("เพิ่มรายการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+      setError("Unable to add the task. Please try again.");
     }
-  };
+  }, [alarmDate, alarmEnabled, alarmTime, category, color, dueDate, note, priority, resetForm, title]);
 
-  const updateTodo = async (id: number, updates: Partial<Pick<Todo, "title" | "completed">>) => {
+  const updateTodo = useCallback(async (id: number, updates: Partial<Todo>) => {
     setError("");
 
     try {
       const res = await fetch(`${API_URL}/${id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
       });
 
@@ -190,25 +294,23 @@ export default function TodoList() {
         throw new Error("Unable to update todo");
       }
 
-      const updatedTodo = await res.json();
+      const updatedTodo = normalizeTodo(await res.json());
       setTodos((currentTodos) =>
         currentTodos.map((todo) => (todo.id === id ? updatedTodo : todo))
       );
-      return updatedTodo as Todo;
+      return updatedTodo;
     } catch (fetchError) {
       console.error(fetchError);
-      setError("อัปเดตรายการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+      setError("Unable to update the task. Please try again.");
       return null;
     }
-  };
+  }, []);
 
-  const deleteTodo = async (id: number) => {
+  const deleteTodo = useCallback(async (id: number) => {
     setError("");
 
     try {
-      const res = await fetch(`${API_URL}/${id}`, {
-        method: "DELETE",
-      });
+      const res = await fetch(`${API_URL}/${id}`, { method: "DELETE" });
 
       if (!res.ok) {
         throw new Error("Unable to delete todo");
@@ -217,21 +319,19 @@ export default function TodoList() {
       setTodos((currentTodos) => currentTodos.filter((todo) => todo.id !== id));
     } catch (fetchError) {
       console.error(fetchError);
-      setError("ลบรายการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+      setError("Unable to delete the task. Please try again.");
     }
-  };
+  }, []);
 
-  const startEditing = (todo: Todo) => {
+  const startEditing = useCallback((todo: Todo) => {
     setEditingId(todo.id);
     setEditingTitle(todo.title);
-  };
+  }, []);
 
-  const saveEditing = async () => {
+  const saveEditing = useCallback(async () => {
     const trimmedTitle = editingTitle.trim();
 
-    if (!editingId || !trimmedTitle) {
-      return;
-    }
+    if (!editingId || !trimmedTitle) return;
 
     const updatedTodo = await updateTodo(editingId, { title: trimmedTitle });
 
@@ -239,652 +339,412 @@ export default function TodoList() {
       setEditingId(null);
       setEditingTitle("");
     }
-  };
+  }, [editingId, editingTitle, updateTodo]);
 
-  const cancelEditing = () => {
-    setEditingId(null);
-    setEditingTitle("");
-  };
-
-  const openAddView = () => {
+  const openAddView = useCallback(() => {
     setActiveView("add");
     window.setTimeout(() => inputRef.current?.focus(), 120);
-  };
+  }, []);
+
+  const monthLabel = currentMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
   return (
-    <main className="planner-shell">
-      <div className="paper-grain" aria-hidden="true" />
-      <section className="planner-stage" aria-label="Pastel planner app preview">
-        <div className="planner-phone">
-          <header className="app-topbar">
-            <button type="button" className="top-icon-button" aria-label="Menu">
-              <span />
-              <span />
-            </button>
+    <main className="planner-app">
+      <div className="planner-container">
+        <aside className="sidebar" aria-label="Primary navigation">
+          <div className="brand-mark">
+            <div className="brand-glyph" aria-hidden="true"><LayoutDashboard size={20} /></div>
             <div>
-              <p>{today.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</p>
+              <strong>Todo Planner</strong>
+              <span>Workspace</span>
+            </div>
+          </div>
+          <Navigation activeView={activeView} onChange={setActiveView} onAdd={openAddView} variant="sidebar" />
+          <div className="sidebar-summary">
+            <span>Completion</span>
+            <strong>{stats.progress}%</strong>
+            <div className="progress-track"><i style={{ width: `${stats.progress}%` }} /></div>
+          </div>
+        </aside>
+
+        <section className="workspace">
+          <header className="topbar">
+            <div>
+              <p>{today.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p>
               <h1>{VIEW_LABELS[activeView]}</h1>
             </div>
-            <div className="avatar-sticker" aria-hidden="true">
-              <DoodleMoodSticker mood="motivated" size="tiny" />
+            <div className="user-area">
+              <div className="user-copy">
+                <strong>Maya</strong>
+                <span>Level 12 Planner</span>
+              </div>
+              <button
+                type="button"
+                className="avatar-button"
+                aria-label="Open profile menu"
+                aria-expanded={profileOpen}
+                onClick={() => setProfileOpen((isOpen) => !isOpen)}
+              >
+                <User size={18} />
+              </button>
+              {profileOpen && (
+                <div className="profile-menu" role="menu">
+                  <button type="button" role="menuitem" onClick={() => setActiveView("profile")}><UserCircle size={16} /> Profile</button>
+                  <button type="button" role="menuitem"><Settings size={16} /> Settings</button>
+                  <button type="button" role="menuitem"><Palette size={16} /> Theme</button>
+                  <button type="button" role="menuitem"><LogOut size={16} /> Logout</button>
+                </div>
+              )}
             </div>
           </header>
 
-          {error && <div className="app-error">{error}</div>}
+          {error && <div className="app-error" role="alert">{error}</div>}
 
-          <div className="screen-viewport">
-            {activeView === "calendar" && (
-              <section className="app-screen calendar-screen" aria-label="Calendar screen">
-                <CalendarCard today={today} days={calendarDays} taskCount={stats.total} />
-                <section className="today-panel">
-                  <div className="panel-handle" aria-hidden="true" />
-                  <div className="panel-title-row">
-                    <h2>Today</h2>
-                    <button type="button" onClick={() => setActiveView("tasks")}>
-                      View all
+          {activeView === "calendar" && (
+            <section className="view-grid calendar-view" aria-label="Calendar planner">
+              <CalendarPanel
+                days={calendarDays}
+                monthLabel={monthLabel}
+                onPrevious={() => setCurrentMonth((date) => new Date(date.getFullYear(), date.getMonth() - 1, 1))}
+                onNext={() => setCurrentMonth((date) => new Date(date.getFullYear(), date.getMonth() + 1, 1))}
+                onSelect={(date) => setSelectedDate(toDateInputValue(date))}
+                taskDates={new Set(todos.map(getTodoDueDate))}
+              />
+              <section className="dashboard-column">
+                <div className="stat-grid compact-stats">
+                  <StatCard label="Tasks Today" value={stats.dueToday} icon={<CalendarDays size={18} />} />
+                  <StatCard label="Completed Today" value={stats.completedToday} icon={<CheckCircle2 size={18} />} />
+                  <StatCard label="Pending Tasks" value={stats.pending} icon={<Clock size={18} />} />
+                </div>
+                <TaskPreview
+                  title={formatDateHeading(selectedDate)}
+                  todos={selectedDateTasks}
+                  isLoading={isLoading}
+                  onAdd={openAddView}
+                  onToggle={(todo) => void updateTodo(todo.id, { completed: !todo.completed })}
+                />
+              </section>
+            </section>
+          )}
+
+          {activeView === "tasks" && (
+            <section className="tasks-view" aria-label="Task list">
+              <div className="task-toolbar">
+                <label className="search-field" htmlFor="task-search">
+                  <Search size={18} />
+                  <input id="task-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search tasks by title" />
+                </label>
+                <select aria-label="Sort tasks" value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
+                  <option value="newest">Newest</option>
+                  <option value="oldest">Oldest</option>
+                  <option value="completed">Completed</option>
+                  <option value="priority">Priority</option>
+                </select>
+                <button type="button" className="primary-button" onClick={openAddView}><Plus size={18} /> Add Task</button>
+              </div>
+              <div className="filter-tabs" role="tablist" aria-label="Task filters">
+                {(Object.keys(FILTER_LABELS) as Filter[]).map((item) => (
+                  <button key={item} type="button" className={filter === item ? "is-active" : ""} onClick={() => setFilter(item)}>
+                    {FILTER_LABELS[item]}
+                  </button>
+                ))}
+              </div>
+              <div className="task-board">
+                {isLoading ? <SkeletonList /> : visibleTodos.length === 0 ? <EmptyState onAdd={openAddView} /> : visibleTodos.map((todo) => (
+                  <TaskCard
+                    key={todo.id}
+                    todo={todo}
+                    isEditing={editingId === todo.id}
+                    editingTitle={editingTitle}
+                    onEditingTitleChange={setEditingTitle}
+                    onStartEditing={() => startEditing(todo)}
+                    onCancelEditing={() => { setEditingId(null); setEditingTitle(""); }}
+                    onSaveEditing={() => void saveEditing()}
+                    onToggle={() => void updateTodo(todo.id, { completed: !todo.completed })}
+                    onDelete={() => void deleteTodo(todo.id)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {activeView === "add" && (
+            <section className="add-view" aria-label="Add task form">
+              <div className="form-intro card">
+                <span className="eyebrow">Create task</span>
+                <h2>Capture the next commitment clearly.</h2>
+                <p>Add title, context, due date, color, and reminder details. The structure is ready for browser notifications.</p>
+              </div>
+              <form className="task-form card" onSubmit={(event) => { event.preventDefault(); void addTodo(); }}>
+                <div className="form-grid two">
+                  <label>Title<input ref={inputRef} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Prepare weekly roadmap" /></label>
+                  <label>Category<select value={category} onChange={(event) => setCategory(event.target.value as Category)}>{CATEGORY_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+                </div>
+                <label>Note<textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add supporting details, links, or acceptance criteria." /></label>
+                <div className="form-grid two">
+                  <label>Date<input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></label>
+                  <label>Priority<select value={priority} onChange={(event) => setPriority(event.target.value as Priority)}>{PRIORITY_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+                </div>
+                <fieldset className="color-picker">
+                  <legend>Color</legend>
+                  <div>{COLOR_OPTIONS.map((item) => (
+                    <button key={item.value} type="button" className={color === item.value ? `color-swatch ${item.value} is-selected` : `color-swatch ${item.value}`} onClick={() => setColor(item.value)} aria-pressed={color === item.value}>
+                      <span />{item.label}
                     </button>
+                  ))}</div>
+                </fieldset>
+                <section className="alarm-box" aria-label="Alarm settings">
+                  <div>
+                    <strong>Reminder</strong>
+                    <span>Store an alarm date and time for notification support.</span>
                   </div>
-                  {isLoading ? (
-                    <div className="compact-skeleton-stack">
-                      {[1, 2, 3].map((item) => (
-                        <div key={item} className="compact-skeleton" />
-                      ))}
-                    </div>
-                  ) : previewTodos.length === 0 ? (
-                    <MiniEmptyState onAdd={openAddView} />
-                  ) : (
-                    <div className="timeline-list">
-                      {previewTodos.map((todo) => (
-                        <CompactTodoRow
-                          key={todo.id}
-                          todo={todo}
-                          editingId={editingId}
-                          editingTitle={editingTitle}
-                          setEditingTitle={setEditingTitle}
-                          onToggle={() => updateTodo(todo.id, { completed: !todo.completed })}
-                          onEdit={() => startEditing(todo)}
-                          onCancel={cancelEditing}
-                          onSave={saveEditing}
-                          onDelete={() => deleteTodo(todo.id)}
-                        />
-                      ))}
+                  <label className="switch"><input type="checkbox" checked={alarmEnabled} onChange={(event) => setAlarmEnabled(event.target.checked)} /><span />Alarm</label>
+                  {alarmEnabled && (
+                    <div className="form-grid two alarm-inputs">
+                      <label>Alarm Date<input type="date" value={alarmDate} onChange={(event) => setAlarmDate(event.target.value)} /></label>
+                      <label>Alarm Time<input type="time" value={alarmTime} onChange={(event) => setAlarmTime(event.target.value)} /></label>
                     </div>
                   )}
                 </section>
+                <button type="submit" className="save-button"><Check size={18} /> Save Task</button>
+              </form>
+            </section>
+          )}
+
+          {activeView === "progress" && (
+            <section className="analytics-view" aria-label="Analytics dashboard">
+              <div className="analytics-hero card">
+                <div>
+                  <span className="eyebrow">Productivity</span>
+                  <h2>{stats.progress}% completion rate</h2>
+                  <p>{stats.completed} of {stats.total} tasks are complete.</p>
+                </div>
+                <div className="progress-ring" style={{ "--progress": `${stats.progress}%` } as CSSProperties}><span>{stats.progress}%</span></div>
+              </div>
+              <WeeklyChart data={stats.weeklyCompleted} />
+              <section className="card mood-card">
+                <div><span className="eyebrow">Mood tracker</span><h2>Today&apos;s working state</h2></div>
+                <div className="mood-grid">{MOOD_OPTIONS.map((item) => <button type="button" key={item.value} className={selectedMood === item.value ? "is-active" : ""} onClick={() => setSelectedMood(item.value)}>{item.label}</button>)}</div>
               </section>
-            )}
+              <div className="stat-grid analytics-stats">
+                <StatCard label="Current streak" value={stats.streak} icon={<Flame size={18} />} />
+                <StatCard label="Average completion" value={`${stats.averageCompletion}%`} icon={<BarChart3 size={18} />} />
+                <StatCard label="Completed this week" value={stats.completedThisWeek} icon={<CheckCircle2 size={18} />} />
+              </div>
+            </section>
+          )}
 
-            {activeView === "tasks" && (
-              <section className="app-screen tasks-screen" aria-label="Daily task screen">
-                <div className="screen-header-row">
-                  <div>
-                    <span>December planner</span>
-                    <h2>Daily Task</h2>
-                  </div>
-                  <button type="button" onClick={fetchTodos} className="round-refresh" aria-label="Refresh todos">
-                    <RefreshCw size={15} />
-                  </button>
-                </div>
-
-                <div className="filter-tabs" aria-label="Todo filters">
-                  {(["all", "active", "completed"] as Filter[]).map((item) => (
-                    <button
-                      key={item}
-                      type="button"
-                      onClick={() => setFilter(item)}
-                      className={filter === item ? "is-active" : ""}
-                    >
-                      {FILTER_LABELS[item]}
-                      <span>{item === "all" ? stats.total : item === "active" ? stats.active : stats.completed}</span>
-                    </button>
-                  ))}
-                </div>
-
-                {isLoading ? (
-                  <div className="compact-skeleton-stack roomy">
-                    {[1, 2, 3, 4].map((item) => (
-                      <div key={item} className="compact-skeleton" />
-                    ))}
-                  </div>
-                ) : filteredTodos.length === 0 ? (
-                  <EmptyState filter={filter} onAdd={openAddView} />
-                ) : (
-                  <div className="daily-card-list">
-                    {filteredTodos.map((todo) => {
-                      const category = getCategory(todo);
-                      const priority = getPriority(todo);
-                      const mood = getMood(todo);
-
-                      return (
-                        <TaskCard
-                          key={todo.id}
-                          todo={todo}
-                          mood={mood}
-                          category={category}
-                          priority={priority}
-                          editingId={editingId}
-                          editingTitle={editingTitle}
-                          setEditingTitle={setEditingTitle}
-                          onToggle={() => updateTodo(todo.id, { completed: !todo.completed })}
-                          onEdit={() => startEditing(todo)}
-                          onCancel={cancelEditing}
-                          onSave={saveEditing}
-                          onDelete={() => deleteTodo(todo.id)}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-            )}
-
-            {activeView === "add" && (
-              <section className="app-screen add-screen" aria-label="Add note screen">
-                <div className="add-hero">
-                  <DoodleMoodSticker mood="excited" size="medium" />
-                  <div>
-                    <span>Quick note</span>
-                    <h2>Add Todo</h2>
-                  </div>
-                </div>
-
-                <div className="date-picker-card">
-                  <span>Date and Time</span>
-                  <div className="date-columns" aria-hidden="true">
-                    <strong>{today.getDate()}</strong>
-                    <strong>{today.toLocaleDateString("en-US", { month: "2-digit" })}</strong>
-                    <strong>{today.getHours().toString().padStart(2, "0")}</strong>
-                    <strong>{today.getMinutes().toString().padStart(2, "0")}</strong>
-                    <strong>{today.getHours() >= 12 ? "PM" : "AM"}</strong>
-                  </div>
-                  <div className="date-labels" aria-hidden="true">
-                    <small>Day</small>
-                    <small>Month</small>
-                    <small>Hour</small>
-                    <small>Minute</small>
-                    <small>Time</small>
-                  </div>
-                </div>
-
-                <div className="note-form-card">
-                  <label htmlFor="todo-title">Title</label>
-                  <input
-                    ref={inputRef}
-                    id="todo-title"
-                    type="text"
-                    placeholder="Write the title"
-                    value={title}
-                    onChange={(event) => setTitle(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        addTodo();
-                      }
-                    }}
-                  />
-                  <label htmlFor="todo-note-preview">Note</label>
-                  <textarea id="todo-note-preview" placeholder="Write your important note" value={title} onChange={(event) => setTitle(event.target.value)} />
-                  <div className="form-options-row">
-                    <div>
-                      <span>Color</span>
-                      <div className="color-dots" aria-hidden="true">
-                        <i className="orange" />
-                        <i className="lime" />
-                        <i className="mint" />
-                      </div>
-                    </div>
-                    <div>
-                      <span>Alarm</span>
-                      <button type="button" className="toggle-pill" aria-label="Decorative alarm toggle" />
-                    </div>
-                  </div>
-                  <button type="button" onClick={addTodo} className="save-note-button">
-                    Save
-                  </button>
+          {activeView === "profile" && (
+            <section className="profile-view" aria-label="User profile">
+              <div className="profile-hero card">
+                <div className="profile-avatar"><User size={32} /></div>
+                <div><span className="eyebrow">User profile</span><h2>Maya</h2><p>Level 12 Planner · Active workspace</p></div>
+              </div>
+              <div className="stat-grid profile-stats">
+                <StatCard label="Total Tasks" value={stats.total} icon={<ListTodo size={18} />} />
+                <StatCard label="Completed Tasks" value={stats.completed} icon={<CheckCircle2 size={18} />} />
+                <StatCard label="Productivity" value={`${stats.progress}%`} icon={<BarChart3 size={18} />} />
+                <StatCard label="Current Streak" value={stats.streak} icon={<Flame size={18} />} />
+                <StatCard label="Longest Streak" value={stats.longestStreak} icon={<Trophy size={18} />} />
+              </div>
+              <section className="card badges-card">
+                <span className="eyebrow">Achievements</span>
+                <div className="badge-list">
+                  <Badge icon={<Trophy size={18} />} title="First Task" active={stats.total > 0} />
+                  <Badge icon={<Flame size={18} />} title="7 Day Streak" active={stats.streak >= 7} />
+                  <Badge icon={<Star size={18} />} title="100 Tasks Completed" active={stats.completed >= 100} />
                 </div>
               </section>
-            )}
-
-            {activeView === "progress" && (
-              <section className="app-screen progress-screen" aria-label="Progress screen">
-                <div className="progress-hero-card">
-                  <div>
-                    <span>Your Progress</span>
-                    <strong>{stats.progress}%</strong>
-                    <p>{todaysSummary.caption}</p>
-                  </div>
-                  <div className="progress-ring compact" style={{ "--progress": `${stats.progress}%` } as CSSProperties}>
-                    <span>{stats.completed}</span>
-                    <small>done</small>
-                  </div>
-                </div>
-                <div className="stat-tile-grid">
-                  <StatCard label="Total" value={stats.total} tone="sage" />
-                  <StatCard label="Active" value={stats.active} tone="yellow" />
-                  <StatCard label="Done" value={stats.completed} tone="blue" />
-                </div>
-                <section className="mood-strip-card">
-                  <div className="section-heading compact">
-                    <span>Today&apos;s mood</span>
-                    <Sparkles size={16} />
-                  </div>
-                  <div className="mood-strip" aria-hidden="true">
-                    <DoodleMoodSticker mood="happy" size="small" />
-                    <DoodleMoodSticker mood="focused" size="small" />
-                    <DoodleMoodSticker mood="relaxed" size="small" />
-                    <DoodleMoodSticker mood="motivated" size="small" />
-                  </div>
-                </section>
-              </section>
-            )}
-          </div>
-
-          <BottomTaskBar activeView={activeView} onChange={setActiveView} onAdd={openAddView} />
-        </div>
-      </section>
-
-      <button type="button" onClick={focusNewTask} className="floating-add" aria-label="Focus add todo input">
-        <Plus size={26} />
-      </button>
+            </section>
+          )}
+        </section>
+      </div>
+      <Navigation activeView={activeView} onChange={setActiveView} onAdd={openAddView} variant="bottom" />
     </main>
   );
 }
 
-function BottomTaskBar({
-  activeView,
-  onChange,
-  onAdd,
-}: {
-  activeView: PlannerView;
-  onChange: (view: PlannerView) => void;
-  onAdd: () => void;
-}) {
+function Navigation({ activeView, onChange, onAdd, variant }: { activeView: PlannerView; onChange: (view: PlannerView) => void; onAdd: () => void; variant: "sidebar" | "bottom" }) {
+  const items: Array<{ view: PlannerView; label: string; icon: ReactNode; action?: () => void }> = [
+    { view: "calendar", label: "Calendar", icon: <CalendarDays size={19} /> },
+    { view: "tasks", label: "Tasks", icon: <ListTodo size={19} /> },
+    { view: "add", label: "Add Task", icon: <Plus size={variant === "bottom" ? 22 : 19} />, action: onAdd },
+    { view: "progress", label: "Analytics", icon: <BarChart3 size={19} /> },
+    { view: "profile", label: "Profile", icon: <UserCircle size={19} /> },
+  ];
+
   return (
-    <nav className="bottom-taskbar" aria-label="Planner navigation">
-      <button type="button" onClick={() => onChange("calendar")} className={activeView === "calendar" ? "is-active" : ""}>
-        <CalendarDays size={18} />
-        <span>Calendar</span>
-      </button>
-      <button type="button" onClick={() => onChange("tasks")} className={activeView === "tasks" ? "is-active" : ""}>
-        <Check size={18} />
-        <span>Tasks</span>
-      </button>
-      <button type="button" onClick={onAdd} className={activeView === "add" ? "nav-add is-active" : "nav-add"} aria-label="Add todo">
-        <Plus size={25} />
-      </button>
-      <button type="button" onClick={() => onChange("progress")} className={activeView === "progress" ? "is-active" : ""}>
-        <Sparkles size={18} />
-        <span>Mood</span>
-      </button>
+    <nav className={variant === "sidebar" ? "nav-list" : "bottom-nav"} aria-label={variant === "sidebar" ? "Sidebar navigation" : "Mobile navigation"}>
+      {items.map((item) => (
+        <button key={item.view} type="button" className={`${activeView === item.view ? "is-active" : ""} ${item.view === "add" ? "add-nav-item" : ""}`} onClick={() => item.action ? item.action() : onChange(item.view)} aria-current={activeView === item.view ? "page" : undefined}>
+          {item.icon}<span>{item.label}</span>
+        </button>
+      ))}
     </nav>
   );
 }
 
-function CalendarCard({ today, days, taskCount }: { today: Date; days: CalendarDay[]; taskCount: number }) {
+function CalendarPanel({ days, monthLabel, onPrevious, onNext, onSelect, taskDates }: { days: CalendarDay[]; monthLabel: string; onPrevious: () => void; onNext: () => void; onSelect: (date: Date) => void; taskDates: Set<string> }) {
   return (
-    <section className="calendar-card glass-card">
-      <div className="calendar-topline">
-        <div>
-          <span className="section-kicker">Calendar</span>
-          <h2>{today.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</h2>
+    <section className="calendar-card card">
+      <div className="calendar-header">
+        <div><span className="eyebrow">Month planner</span><h2>{monthLabel}</h2></div>
+        <div className="month-actions">
+          <button type="button" aria-label="Previous month" onClick={onPrevious}><ChevronLeft size={18} /></button>
+          <button type="button" aria-label="Next month" onClick={onNext}><ChevronRight size={18} /></button>
         </div>
-        <CalendarDays size={20} />
       </div>
-      <div className="weekday-grid" aria-hidden="true">
-        {["M", "T", "W", "T", "F", "S", "S"].map((day, index) => (
-          <span key={`${day}-${index}`}>{day}</span>
-        ))}
-      </div>
+      <div className="weekday-grid" aria-hidden="true">{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <span key={day}>{day}</span>)}</div>
       <div className="calendar-grid">
-        {days.map((day) => (
-          <span key={day.key} className={`${day.isOutside ? "is-outside" : ""} ${day.isToday ? "is-today" : ""}`}>
-            {day.date.getDate()}
-          </span>
-        ))}
-      </div>
-      <div className="calendar-note">
-        <DoodleMoodSticker mood="relaxed" size="tiny" />
-        <p>{taskCount === 0 ? "Fresh planner page" : `${taskCount} synced notes`}</p>
+        {days.map((day) => <button key={day.key} type="button" className={`${day.isOutside ? "is-outside" : ""} ${day.isToday ? "is-today" : ""} ${day.isSelected ? "is-selected" : ""}`} onClick={() => onSelect(day.date)} aria-label={day.date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}>
+          <span>{day.date.getDate()}</span>{taskDates.has(toDateInputValue(day.date)) && <i aria-hidden="true" />}
+        </button>)}
       </div>
     </section>
   );
 }
 
-function CompactTodoRow({
-  todo,
-  editingId,
-  editingTitle,
-  setEditingTitle,
-  onToggle,
-  onEdit,
-  onCancel,
-  onSave,
-  onDelete,
-}: TodoActionsProps) {
+function TaskPreview({ title, todos, isLoading, onAdd, onToggle }: { title: string; todos: Todo[]; isLoading: boolean; onAdd: () => void; onToggle: (todo: Todo) => void }) {
   return (
-    <article className={todo.completed ? "compact-todo-row is-complete" : "compact-todo-row"}>
-      <button type="button" onClick={onToggle} className="tiny-check" aria-label={todo.completed ? "Mark as active" : "Mark as completed"}>
-        <Check size={13} />
-      </button>
-      <span className="timeline-line" aria-hidden="true" />
-      <div className="compact-row-content">
-        {editingId === todo.id ? (
-          <input
-            value={editingTitle}
-            onChange={(event) => setEditingTitle(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                onSave();
-              }
+    <section className="card task-preview">
+      <div className="section-title"><div><span className="eyebrow">Selected day</span><h2>{title}</h2></div><button type="button" onClick={onAdd}>Add</button></div>
+      {isLoading ? <SkeletonList compact /> : todos.length === 0 ? <p className="muted-empty">No tasks scheduled for this date.</p> : todos.slice(0, 5).map((todo) => (
+        <button key={todo.id} type="button" className="preview-row" onClick={() => onToggle(todo)}>
+          {todo.completed ? <CheckCircle2 size={18} /> : <Circle size={18} />}<span>{todo.title}</span><small className={`priority-badge ${normalizePriority(todo.priority)}`}>{normalizePriority(todo.priority)}</small>
+        </button>
+      ))}
+    </section>
+  );
+}
 
-              if (event.key === "Escape") {
-                onCancel();
-              }
-            }}
-            className="inline-edit-input"
-            autoFocus
-          />
+function TaskCard({ todo, isEditing, editingTitle, onEditingTitleChange, onStartEditing, onCancelEditing, onSaveEditing, onToggle, onDelete }: { todo: Todo; isEditing: boolean; editingTitle: string; onEditingTitleChange: (value: string) => void; onStartEditing: () => void; onCancelEditing: () => void; onSaveEditing: () => void; onToggle: () => void; onDelete: () => void }) {
+  const priority = normalizePriority(todo.priority);
+  const category = normalizeCategory(todo.category);
+  const color = normalizeColor(todo.color);
+  const alarmActive = Boolean(todo.alarmEnabled || todo.alarm);
+
+  return (
+    <article className={`task-card color-${color} ${todo.completed ? "is-completed" : ""}`}>
+      <button type="button" className="complete-button" onClick={onToggle} aria-label={todo.completed ? "Mark task incomplete" : "Mark task complete"}>{todo.completed ? <CheckCircle2 size={20} /> : <Circle size={20} />}</button>
+      <div className="task-content">
+        {isEditing ? (
+          <input className="edit-input" value={editingTitle} onChange={(event) => onEditingTitleChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") onSaveEditing(); if (event.key === "Escape") onCancelEditing(); }} aria-label="Edit task title" autoFocus />
         ) : (
-          <h3>{todo.title}</h3>
+          <><h3>{todo.title}</h3>{todo.note && <p>{todo.note}</p>}</>
         )}
-        <p>{todo.completed ? "Done" : formatTaskMeta(todo)}</p>
+        <div className="task-meta">
+          <span><Folder size={14} />{CATEGORY_OPTIONS.find((item) => item.value === category)?.label}</span>
+          <span className={`priority-badge ${priority}`}><Flag size={14} />{priority}</span>
+          <span><CalendarDays size={14} />{formatDateHeading(getTodoDueDate(todo), true)}</span>
+          {alarmActive && <span className="reminder-badge"><Bell size={14} />{formatAlarm(todo.alarmDateTime)}</span>}
+        </div>
       </div>
-      <div className="compact-actions">
-        {editingId === todo.id ? (
-          <>
-            <button type="button" onClick={onCancel} aria-label="Cancel editing">
-              <X size={13} />
-            </button>
-            <button type="button" onClick={onSave} className="text-action">
-              Save
-            </button>
-          </>
-        ) : (
-          <>
-            <button type="button" onClick={onEdit} aria-label="Edit todo">
-              <Pencil size={13} />
-            </button>
-            <button type="button" onClick={onDelete} aria-label="Delete todo">
-              <Trash2 size={13} />
-            </button>
-          </>
-        )}
+      <div className="task-actions">
+        {isEditing ? <><button type="button" onClick={onSaveEditing} aria-label="Save task title"><Check size={17} /></button><button type="button" onClick={onCancelEditing} aria-label="Cancel editing"><X size={17} /></button></> : <button type="button" onClick={onStartEditing} aria-label="Edit task"><Pencil size={17} /></button>}
+        <button type="button" onClick={onDelete} aria-label="Delete task"><Trash2 size={17} /></button>
       </div>
     </article>
   );
 }
 
-interface TodoActionsProps {
-  todo: Todo;
-  editingId: number | null;
-  editingTitle: string;
-  setEditingTitle: (title: string) => void;
-  onToggle: () => void;
-  onEdit: () => void;
-  onCancel: () => void;
-  onSave: () => void;
-  onDelete: () => void;
+function WeeklyChart({ data }: { data: Array<{ label: string; count: number }> }) {
+  const max = Math.max(...data.map((item) => item.count), 1);
+  return <section className="card weekly-card"><div><span className="eyebrow">Weekly chart</span><h2>Completed by day</h2></div><div className="weekly-chart">{data.map((item) => <div key={item.label}><span style={{ height: `${Math.max((item.count / max) * 100, 8)}%` }} /><small>{item.label}</small><strong>{item.count}</strong></div>)}</div></section>;
 }
 
-function TaskCard({
-  todo,
-  mood,
-  category,
-  priority,
-  editingId,
-  editingTitle,
-  setEditingTitle,
-  onToggle,
-  onEdit,
-  onCancel,
-  onSave,
-  onDelete,
-}: TodoActionsProps & {
-  mood: DoodleMood;
-  category: { label: string; tone: string };
-  priority: { label: string; tone: string };
-}) {
-  return (
-    <article className={todo.completed ? "daily-task-card is-complete" : "daily-task-card"}>
-      <div className="task-accent-date">
-        <span>{todo.completed ? "Done" : "Now"}</span>
-      </div>
-      <div className="daily-task-body">
-        <div className="daily-task-top">
-          <DoodleMoodSticker mood={mood} size="tiny" />
-          <div className="task-badges">
-            <span className={`category-chip ${category.tone}`}>{category.label}</span>
-            <span className={`priority-chip ${priority.tone}`}>{priority.label}</span>
-          </div>
-        </div>
-        <div className="daily-task-title-row">
-          <button type="button" onClick={onToggle} className={todo.completed ? "tiny-check is-complete" : "tiny-check"} aria-label={todo.completed ? "Mark as active" : "Mark as completed"}>
-            <Check size={13} />
-          </button>
-          <div>
-            {editingId === todo.id ? (
-              <input
-                value={editingTitle}
-                onChange={(event) => setEditingTitle(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    onSave();
-                  }
-
-                  if (event.key === "Escape") {
-                    onCancel();
-                  }
-                }}
-                className="inline-edit-input"
-                autoFocus
-              />
-            ) : (
-              <h3>{todo.title}</h3>
-            )}
-            <p>{todo.completed ? "Completed with a happy little check" : formatTaskMeta(todo)}</p>
-          </div>
-        </div>
-        <div className="daily-task-actions">
-          {editingId === todo.id ? (
-            <>
-              <button type="button" onClick={onCancel} aria-label="Cancel editing">
-                <X size={14} />
-              </button>
-              <button type="button" onClick={onSave} className="text-action">
-                Save
-              </button>
-            </>
-          ) : (
-            <>
-              <button type="button" onClick={onEdit} aria-label="Edit todo">
-                <Pencil size={14} />
-              </button>
-              <button type="button" onClick={onDelete} aria-label="Delete todo">
-                <Trash2 size={14} />
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </article>
-  );
+function StatCard({ label, value, icon }: { label: string; value: number | string; icon: ReactNode }) {
+  return <article className="stat-card card"><div>{icon}</div><span>{label}</span><strong>{value}</strong></article>;
 }
 
-function StatCard({ label, value, tone }: { label: string; value: number; tone: "sage" | "yellow" | "blue" }) {
-  return (
-    <div className={`stat-card ${tone}`}>
-      <p>{value}</p>
-      <span>{label}</span>
-    </div>
-  );
+function Badge({ icon, title, active }: { icon: ReactNode; title: string; active: boolean }) {
+  return <div className={active ? "badge-item is-active" : "badge-item"}>{icon}<span>{title}</span></div>;
 }
 
-function MiniEmptyState({ onAdd }: { onAdd: () => void }) {
-  return (
-    <div className="mini-empty-state">
-      <DoodleMoodSticker mood="sleepy" size="small" />
-      <p>No notes yet</p>
-      <button type="button" onClick={onAdd}>Add one</button>
-    </div>
-  );
+function EmptyState({ onAdd }: { onAdd: () => void }) {
+  return <div className="empty-state card"><ListTodo size={36} /><h3>No tasks found</h3><p>Create a task or adjust your search and filters.</p><button type="button" onClick={onAdd}>Add Task</button></div>;
 }
 
-function EmptyState({ filter, onAdd }: { filter: Filter; onAdd: () => void }) {
-  return (
-    <div className="empty-state">
-      <EmptyDoodle />
-      <h3>{filter === "all" ? "Your planner page is blank" : "No notes in this view"}</h3>
-      <p>
-        {filter === "all"
-          ? "Add a first todo to pin a cute little plan to today."
-          : "Try another filter or add a new task to keep planning."}
-      </p>
-      <button type="button" onClick={onAdd}>Add Todo</button>
-    </div>
-  );
+function SkeletonList({ compact = false }: { compact?: boolean }) {
+  return <div className={compact ? "skeleton-list compact" : "skeleton-list"}>{Array.from({ length: compact ? 3 : 5 }, (_, index) => <span key={index} />)}</div>;
 }
 
-interface CalendarDay {
-  key: string;
-  date: Date;
-  isOutside: boolean;
-  isToday: boolean;
-}
-
-function buildCalendarDays(baseDate: Date): CalendarDay[] {
+function buildCalendarDays(baseDate: Date, selectedDate: string): CalendarDay[] {
   const year = baseDate.getFullYear();
   const month = baseDate.getMonth();
   const firstOfMonth = new Date(year, month, 1);
   const mondayIndex = (firstOfMonth.getDay() + 6) % 7;
   const start = new Date(year, month, 1 - mondayIndex);
 
-  return Array.from({ length: 35 }, (_, index) => {
+  return Array.from({ length: 42 }, (_, index) => {
     const date = new Date(start);
     date.setDate(start.getDate() + index);
-
-    return {
-      key: date.toISOString(),
-      date,
-      isOutside: date.getMonth() !== month,
-      isToday: date.toDateString() === baseDate.toDateString(),
-    };
+    return { key: date.toISOString(), date, isOutside: date.getMonth() !== month, isToday: toDateInputValue(date) === todayKey, isSelected: toDateInputValue(date) === selectedDate };
   });
 }
 
-function formatTaskMeta(todo: Todo) {
-  if (!todo.created_at) {
-    return "New planner note";
+function normalizeTodo(todo: Todo): Todo {
+  return { ...todo, color: normalizeColor(todo.color), priority: normalizePriority(todo.priority), category: normalizeCategory(todo.category), dueDate: todo.dueDate ?? todo.created_at?.slice(0, 10) ?? todayKey, alarmEnabled: Boolean(todo.alarmEnabled ?? todo.alarm) };
+}
+
+function normalizeColor(value?: string): TaskColor {
+  return COLOR_OPTIONS.some((item) => item.value === value) ? (value as TaskColor) : "green";
+}
+
+function normalizePriority(value?: string): Priority {
+  return PRIORITY_OPTIONS.some((item) => item.value === value) ? (value as Priority) : "medium";
+}
+
+function normalizeCategory(value?: string): Category {
+  return CATEGORY_OPTIONS.some((item) => item.value === value) ? (value as Category) : "other";
+}
+
+function getTodoDueDate(todo: Todo) {
+  return todo.dueDate ?? todo.created_at?.slice(0, 10) ?? todayKey;
+}
+
+function toDateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function timestamp(value?: string) {
+  const time = value ? new Date(value).getTime() : 0;
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function formatDateHeading(value: string, short = false) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "No date";
+  return date.toLocaleDateString("en-US", short ? { month: "short", day: "numeric" } : { month: "long", day: "numeric", year: "numeric" });
+}
+
+function formatAlarm(value?: string | null) {
+  if (!value) return "Reminder";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Reminder";
+  return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function getWeeklyCompleted(todos: Todo[], today: Date) {
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() - (6 - index));
+    const key = toDateInputValue(date);
+    return { label: date.toLocaleDateString("en-US", { weekday: "short" }), count: todos.filter((todo) => todo.completed && (todo.updated_at?.slice(0, 10) ?? getTodoDueDate(todo)) === key).length };
+  });
+}
+
+function calculateCurrentStreak(todos: Todo[], today: Date) {
+  let streak = 0;
+  for (let offset = 0; offset < 30; offset += 1) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - offset);
+    const key = toDateInputValue(date);
+    const hasCompletedTask = todos.some((todo) => todo.completed && (todo.updated_at?.slice(0, 10) ?? getTodoDueDate(todo)) === key);
+    if (!hasCompletedTask) break;
+    streak += 1;
   }
-
-  const createdAt = new Date(todo.created_at);
-
-  if (Number.isNaN(createdAt.getTime())) {
-    return "Saved in your planner";
-  }
-
-  return `Added ${createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
-}
-
-function getCategory(todo: Todo) {
-  return CATEGORY_STYLES[Math.abs(todo.id) % CATEGORY_STYLES.length];
-}
-
-function getPriority(todo: Todo) {
-  const urgentWords = ["urgent", "important", "today", "now", "ด่วน", "สำคัญ"];
-  const hasUrgentWord = urgentWords.some((word) => todo.title.toLowerCase().includes(word));
-
-  if (hasUrgentWord) {
-    return PRIORITIES[2];
-  }
-
-  return PRIORITIES[Math.abs(todo.id + todo.title.length) % PRIORITIES.length];
-}
-
-function getMood(todo: Todo): DoodleMood {
-  if (todo.completed) {
-    return "happy";
-  }
-
-  return MOODS[Math.abs(todo.id + todo.title.length) % MOODS.length];
-}
-
-function DoodleMoodSticker({ mood, size }: { mood: DoodleMood; size: "tiny" | "small" | "medium" | "large" }) {
-  const moodClass = `doodle-sticker ${mood} ${size}`;
-
-  return (
-    <svg className={moodClass} viewBox="0 0 120 120" role="img" aria-label={`${mood} doodle mood`}>
-      <path className="blob-shadow" d="M24 96c15 16 61 18 78-2 14-17 8-55-5-70C82 6 38 8 22 25 5 43 8 80 24 96Z" />
-      <path className="blob" d="M22 92c16 19 61 20 77 1 15-18 9-53-4-68C80 7 40 8 23 25 6 42 7 76 22 92Z" />
-      {mood === "happy" && (
-        <>
-          <circle className="eye" cx="43" cy="49" r="5" />
-          <circle className="eye" cx="75" cy="48" r="5" />
-          <path className="mouth" d="M39 67c8 14 32 15 42-1" />
-          <circle className="cheek" cx="31" cy="63" r="5" />
-          <circle className="cheek" cx="89" cy="62" r="5" />
-        </>
-      )}
-      {mood === "focused" && (
-        <>
-          <path className="brow" d="M34 39c7-6 16-7 23-4" />
-          <path className="brow" d="M70 36c8-3 16-1 21 5" />
-          <circle className="eye" cx="47" cy="53" r="5" />
-          <circle className="eye" cx="75" cy="54" r="5" />
-          <path className="mouth" d="M45 75c9-7 24-7 33 0" />
-        </>
-      )}
-      {mood === "excited" && (
-        <>
-          <rect className="eye" x="38" y="44" width="11" height="13" rx="4" />
-          <rect className="eye" x="72" y="44" width="11" height="13" rx="4" />
-          <path className="open-mouth" d="M47 67c8-12 27-11 33 1 3 13-8 23-19 22-10-1-18-10-14-23Z" />
-          <path className="tongue" d="M53 78c7 5 15 5 22 0" />
-          <path className="star" d="M96 25l5 10 11 4-10 5-4 11-6-10-11-4 10-6Z" />
-        </>
-      )}
-      {mood === "relaxed" && (
-        <>
-          <path className="closed-eye" d="M36 50c6 6 15 6 21 0" />
-          <path className="closed-eye" d="M69 50c6 6 15 6 21 0" />
-          <path className="mouth" d="M42 69c9 13 30 13 39 0" />
-          <circle className="cheek" cx="34" cy="63" r="5" />
-          <circle className="cheek" cx="88" cy="63" r="5" />
-        </>
-      )}
-      {mood === "sleepy" && (
-        <>
-          <path className="closed-eye" d="M35 52c5 4 13 4 18 0" />
-          <path className="closed-eye" d="M68 52c5 4 13 4 18 0" />
-          <path className="mouth" d="M48 76c6-5 17-5 23 0" />
-          <path className="sleep-mark" d="M87 25h15L88 43h16" />
-        </>
-      )}
-      {mood === "motivated" && (
-        <>
-          <path className="brow" d="M34 38c7-5 15-6 22-1" />
-          <path className="brow" d="M70 37c8-4 16-2 22 4" />
-          <circle className="eye" cx="45" cy="52" r="5" />
-          <circle className="eye" cx="77" cy="52" r="5" />
-          <path className="open-mouth" d="M45 68c8-10 29-10 35 2 1 12-9 21-20 20-11-1-18-10-15-22Z" />
-          <path className="tongue" d="M54 80c7 4 14 4 21-1" />
-          <path className="leaf-deco" d="M88 18c12-6 21-4 26 4-6 10-17 12-27 5" />
-        </>
-      )}
-    </svg>
-  );
-}
-
-function EmptyDoodle() {
-  return (
-    <svg className="empty-doodle" viewBox="0 0 220 170" role="img" aria-label="Hand drawn empty planner illustration">
-      <path className="empty-paper" d="M45 28c38-12 88-10 125 0 10 32 7 74-5 110-34 13-82 13-119 2C35 105 34 63 45 28Z" />
-      <path className="empty-line" d="M70 68c30-5 57-4 85 1" />
-      <path className="empty-line short" d="M72 91c20-4 43-4 67 0" />
-      <path className="empty-line" d="M69 114c27 4 56 4 86-2" />
-      <circle className="empty-check" cx="52" cy="70" r="8" />
-      <circle className="empty-check" cx="52" cy="94" r="8" />
-      <circle className="empty-check" cx="52" cy="117" r="8" />
-      <path className="empty-spark" d="M177 43l6 12 13 4-12 6-5 13-7-12-12-5 12-7Z" />
-      <path className="empty-heart" d="M34 42c-10-13 10-26 19-9 11-17 31 0 18 14L53 66Z" />
-    </svg>
-  );
+  return streak;
 }

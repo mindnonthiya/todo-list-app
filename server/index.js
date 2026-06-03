@@ -24,15 +24,66 @@ const pool = new Pool({
       : false,
 });
 
+const allowedColors = new Set(["yellow", "green", "blue", "pink", "purple"]);
+const allowedPriorities = new Set(["low", "medium", "high"]);
+const allowedCategories = new Set(["work", "study", "personal", "health", "other"]);
+
 const sendServerError = (res, error) => {
   console.error(error);
   res.status(500).json({ message: "Internal server error" });
 };
 
+const normalizeChoice = (value, allowedValues, fallback) =>
+  allowedValues.has(value) ? value : fallback;
+
+const normalizeDate = (value) => {
+  if (!value) return null;
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? null : value;
+};
+
+const normalizeAlarmDateTime = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
+
 const normalizeTodo = (todo) => ({
   ...todo,
   completed: Boolean(todo.completed),
+  alarmEnabled: Boolean(todo.alarmEnabled),
+  alarm: Boolean(todo.alarmEnabled),
 });
+
+const todoSelect = `
+  SELECT
+    id,
+    title,
+    note,
+    completed,
+    color,
+    priority,
+    category,
+    due_date AS "dueDate",
+    alarm_enabled AS "alarmEnabled",
+    alarm_datetime AS "alarmDateTime",
+    created_at,
+    updated_at
+  FROM todos
+`;
+
+const ensureTodoColumns = async () => {
+  await pool.query(`
+    ALTER TABLE todos
+      ADD COLUMN IF NOT EXISTS note TEXT NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS color VARCHAR(20) NOT NULL DEFAULT 'green',
+      ADD COLUMN IF NOT EXISTS priority VARCHAR(20) NOT NULL DEFAULT 'medium',
+      ADD COLUMN IF NOT EXISTS category VARCHAR(30) NOT NULL DEFAULT 'other',
+      ADD COLUMN IF NOT EXISTS due_date DATE,
+      ADD COLUMN IF NOT EXISTS alarm_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS alarm_datetime TIMESTAMP
+  `);
+};
 
 app.get("/", (req, res) => {
   res.json({ message: "Todo API is running" });
@@ -40,9 +91,7 @@ app.get("/", (req, res) => {
 
 app.get("/api/todos", async (req, res) => {
   try {
-    const result = await pool.query(
-      "SELECT id, title, completed, created_at, updated_at FROM todos ORDER BY created_at DESC, id DESC"
-    );
+    const result = await pool.query(`${todoSelect} ORDER BY created_at DESC, id DESC`);
 
     res.json(result.rows.map(normalizeTodo));
   } catch (error) {
@@ -58,9 +107,19 @@ app.post("/api/todos", async (req, res) => {
       return res.status(400).json({ message: "Todo title is required" });
     }
 
+    const note = typeof req.body.note === "string" ? req.body.note.trim() : "";
+    const color = normalizeChoice(req.body.color, allowedColors, "green");
+    const priority = normalizeChoice(req.body.priority, allowedPriorities, "medium");
+    const category = normalizeChoice(req.body.category, allowedCategories, "other");
+    const dueDate = normalizeDate(req.body.dueDate);
+    const alarmEnabled = Boolean(req.body.alarmEnabled ?? req.body.alarm);
+    const alarmDateTime = alarmEnabled ? normalizeAlarmDateTime(req.body.alarmDateTime) : null;
+
     const result = await pool.query(
-      "INSERT INTO todos(title, completed) VALUES($1, $2) RETURNING id, title, completed, created_at, updated_at",
-      [title, false]
+      `INSERT INTO todos(title, note, completed, color, priority, category, due_date, alarm_enabled, alarm_datetime)
+       VALUES($1, $2, $3, $4, $5, $6, COALESCE($7::date, CURRENT_DATE), $8, $9)
+       RETURNING id, title, note, completed, color, priority, category, due_date AS "dueDate", alarm_enabled AS "alarmEnabled", alarm_datetime AS "alarmDateTime", created_at, updated_at`,
+      [title, note, false, color, priority, category, dueDate, alarmEnabled, alarmDateTime]
     );
 
     res.status(201).json(normalizeTodo(result.rows[0]));
@@ -73,27 +132,53 @@ app.put("/api/todos/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const title = typeof req.body.title === "string" ? req.body.title.trim() : undefined;
+    const note = typeof req.body.note === "string" ? req.body.note.trim() : undefined;
     const completed =
       typeof req.body.completed === "boolean" ? req.body.completed : undefined;
+    const color = req.body.color === undefined ? undefined : normalizeChoice(req.body.color, allowedColors, "green");
+    const priority = req.body.priority === undefined ? undefined : normalizeChoice(req.body.priority, allowedPriorities, "medium");
+    const category = req.body.category === undefined ? undefined : normalizeChoice(req.body.category, allowedCategories, "other");
+    const dueDate = req.body.dueDate === undefined ? undefined : normalizeDate(req.body.dueDate);
+    const alarmEnabled =
+      req.body.alarmEnabled === undefined && req.body.alarm === undefined
+        ? undefined
+        : Boolean(req.body.alarmEnabled ?? req.body.alarm);
+    const alarmDateTime =
+      req.body.alarmDateTime === undefined ? undefined : normalizeAlarmDateTime(req.body.alarmDateTime);
 
     if (title === "") {
       return res.status(400).json({ message: "Todo title cannot be empty" });
     }
 
-    if (title === undefined && completed === undefined) {
-      return res
-        .status(400)
-        .json({ message: "Provide a title or completed status to update" });
+    if (
+      title === undefined &&
+      note === undefined &&
+      completed === undefined &&
+      color === undefined &&
+      priority === undefined &&
+      category === undefined &&
+      dueDate === undefined &&
+      alarmEnabled === undefined &&
+      alarmDateTime === undefined
+    ) {
+      return res.status(400).json({ message: "Provide at least one field to update" });
     }
 
     const result = await pool.query(
       `UPDATE todos
        SET title = COALESCE($1, title),
-           completed = COALESCE($2, completed),
+           note = COALESCE($2, note),
+           completed = COALESCE($3, completed),
+           color = COALESCE($4, color),
+           priority = COALESCE($5, priority),
+           category = COALESCE($6, category),
+           due_date = COALESCE($7::date, due_date),
+           alarm_enabled = COALESCE($8, alarm_enabled),
+           alarm_datetime = COALESCE($9, alarm_datetime),
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $3
-       RETURNING id, title, completed, created_at, updated_at`,
-      [title, completed, id]
+       WHERE id = $10
+       RETURNING id, title, note, completed, color, priority, category, due_date AS "dueDate", alarm_enabled AS "alarmEnabled", alarm_datetime AS "alarmDateTime", created_at, updated_at`,
+      [title, note, completed, color, priority, category, dueDate, alarmEnabled, alarmDateTime, id]
     );
 
     if (result.rowCount === 0) {
@@ -121,6 +206,13 @@ app.delete("/api/todos/:id", async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-});
+ensureTodoColumns()
+  .then(() => {
+    app.listen(port, () => {
+      console.log(`Server running on port ${port}`);
+    });
+  })
+  .catch((error) => {
+    console.error("Unable to prepare todos table", error);
+    process.exit(1);
+  });
