@@ -154,8 +154,6 @@ export default function TodoList() {
 
   const dateLocale = language === "th" ? "th-TH" : "en-US";
 
-  const dateLocale = language === "th" ? "th-TH" : "en-US";
-
   const fetchTodos = useCallback(async () => {
     setIsLoading(true);
     setError("");

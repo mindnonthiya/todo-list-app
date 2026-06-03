@@ -449,3 +449,575 @@ select, input, textarea { border: 1px solid var(--border); border-radius: 14px; 
     align-items: start;
   }
 }
+
+/* Mobile refinement pass: preserve identity while tightening density and rhythm. */
+.planner-app {
+  font-weight: 400;
+}
+
+.topbar h1,
+.card h2,
+.form-intro h2,
+.analytics-hero h2,
+.profile-hero h2,
+.task-content h3,
+.modal-header h2,
+.empty-state h3 {
+  font-weight: 600;
+}
+
+.brand-mark strong,
+.user-copy strong,
+.stat-card strong,
+.sidebar-summary strong {
+  font-weight: 600;
+}
+
+.nav-list button,
+.bottom-nav button,
+.primary-button,
+.save-button,
+.empty-state button,
+.danger-button,
+.secondary-button,
+.filter-tabs button,
+.color-swatch,
+.task-form label,
+.edit-title-form label,
+.switch,
+.stat-card span,
+.badge-item,
+.task-meta span,
+.priority-badge,
+.reminder-badge,
+.weekly-chart div,
+.mood-grid button,
+.language-toggle button {
+  font-weight: 500;
+}
+
+.card p,
+.task-content p,
+.muted-empty,
+.delete-confirmation p {
+  font-weight: 400;
+}
+
+.color-swatch.green { --task-color: #6f8062; }
+.color-swatch.blue { --task-color: #5f7f93; }
+.color-swatch.yellow { --task-color: #c7a84b; }
+.color-swatch.orange { --task-color: #bf7a45; }
+.color-swatch.purple { --task-color: #82749d; }
+.color-swatch.red { --task-color: #b85f58; }
+
+.color-swatch span {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  display: inline-block;
+  border: 1px solid color-mix(in srgb, var(--surface-raised) 72%, #000);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #fff 30%, transparent);
+}
+
+.color-swatch.is-selected {
+  transform: scale(1.02);
+}
+
+.profile-stats .stat-card,
+.analytics-stats .stat-card {
+  aspect-ratio: auto;
+  min-height: 112px;
+}
+
+.profile-controls .secondary-button,
+.profile-controls .language-toggle {
+  min-height: 42px;
+}
+
+@media (max-width: 767px) {
+  .planner-app {
+    padding: 8px 8px calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .workspace {
+    gap: 12px;
+  }
+
+  .topbar {
+    min-height: 64px;
+    padding: 12px 14px;
+    border-radius: 20px;
+  }
+
+  .topbar p {
+    margin-bottom: 2px;
+    font-size: .78rem;
+    font-weight: 400;
+  }
+
+  .topbar h1 {
+    font-size: 1.35rem;
+    letter-spacing: -.02em;
+  }
+
+  .header-actions {
+    gap: 6px;
+  }
+
+  .avatar-button {
+    width: 38px;
+    height: 38px;
+  }
+
+  .avatar-button svg,
+  .theme-quick-button svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .language-toggle {
+    padding: 3px;
+  }
+
+  .language-toggle button {
+    min-width: 30px;
+    min-height: 28px;
+    font-size: .7rem;
+  }
+
+  .card {
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  .card h2,
+  .form-intro h2,
+  .analytics-hero h2,
+  .profile-hero h2 {
+    font-size: 1.05rem;
+  }
+
+  .card p {
+    margin: 6px 0 0;
+    font-size: .88rem;
+    line-height: 1.45;
+  }
+
+  .eyebrow {
+    margin-bottom: 4px;
+    font-size: .68rem;
+    font-weight: 500;
+    letter-spacing: .06em;
+  }
+
+  .calendar-layout,
+  .add-view,
+  .analytics-view,
+  .profile-view,
+  .day-column,
+  .tasks-view {
+    gap: 12px;
+  }
+
+  .calendar-card {
+    padding: 14px;
+    width: min(100%, 420px);
+    justify-self: center;
+    overflow: visible;
+  }
+
+  .calendar-header h2 {
+    font-size: 1.15rem;
+  }
+
+  .month-actions button {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+  }
+
+  .month-actions button svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .weekday-grid,
+  .calendar-grid {
+    gap: 4px;
+  }
+
+  .weekday-grid {
+    margin-top: 12px;
+    font-size: .64rem;
+  }
+
+  .calendar-grid {
+    margin-top: 6px;
+  }
+
+  .calendar-grid button {
+    min-height: 38px;
+    max-height: 42px;
+    border-radius: 10px;
+    font-size: .82rem;
+  }
+
+  .calendar-grid button i {
+    bottom: 5px;
+    width: 4px;
+    height: 4px;
+  }
+
+  .compact-stats {
+    gap: 8px;
+  }
+
+  .compact-stats .stat-card {
+    flex-basis: 112px;
+    padding: 12px;
+  }
+
+  .stat-card div {
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+  }
+
+  .stat-card div svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .stat-card strong {
+    font-size: 1.35rem;
+  }
+
+  .stat-card span {
+    font-size: .75rem;
+  }
+
+  .task-preview {
+    gap: 10px;
+  }
+
+  .section-title {
+    gap: 10px;
+  }
+
+  .section-title button {
+    height: 34px;
+    padding: 0 12px;
+  }
+
+  .preview-row {
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .task-toolbar {
+    gap: 8px;
+  }
+
+  .search-field,
+  .task-toolbar select,
+  .primary-button,
+  .save-button,
+  .empty-state button,
+  .danger-button,
+  .secondary-button {
+    min-height: 40px;
+    border-radius: 14px;
+  }
+
+  .filter-tabs {
+    gap: 6px;
+  }
+
+  .filter-tabs button {
+    padding: 8px 12px;
+    font-size: .82rem;
+  }
+
+  .task-board {
+    gap: 10px;
+  }
+
+  .task-card {
+    gap: 10px;
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .task-card::before {
+    width: 4px;
+  }
+
+  .complete-button svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .task-content h3 {
+    margin-bottom: 4px;
+    font-size: .95rem;
+    line-height: 1.28;
+  }
+
+  .task-content p {
+    margin-bottom: 10px;
+    font-size: .84rem;
+    line-height: 1.4;
+  }
+
+  .task-meta {
+    gap: 6px;
+  }
+
+  .task-meta span,
+  .priority-badge,
+  .reminder-badge {
+    padding: 4px 8px;
+    font-size: .7rem;
+    font-weight: 400;
+  }
+
+  .task-meta svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .task-actions {
+    gap: 4px;
+  }
+
+  .task-actions button {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+  }
+
+  .task-actions svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .form-intro {
+    padding: 14px 16px;
+  }
+
+  .task-form {
+    gap: 14px;
+  }
+
+  .task-form label,
+  .edit-title-form label {
+    gap: 6px;
+    font-size: .84rem;
+  }
+
+  .task-form input,
+  .task-form select,
+  .edit-title-form input {
+    min-height: 40px;
+    padding: 0 10px;
+    border-radius: 12px;
+  }
+
+  .task-form textarea {
+    min-height: 88px;
+    padding: 10px;
+    border-radius: 12px;
+  }
+
+  .form-grid {
+    gap: 12px;
+  }
+
+  .color-picker legend {
+    font-size: .84rem;
+    font-weight: 500;
+  }
+
+  .color-picker > div {
+    gap: 6px;
+  }
+
+  .color-swatch {
+    min-height: 36px;
+    padding: 0 10px;
+    gap: 7px;
+    font-size: .82rem;
+  }
+
+  .color-swatch span {
+    flex-basis: 12px;
+    width: 12px;
+    height: 12px;
+  }
+
+  .alarm-box {
+    gap: 10px;
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .switch span {
+    width: 42px;
+    height: 24px;
+  }
+
+  .switch span::after {
+    width: 16px;
+    height: 16px;
+  }
+
+  .switch input:checked + span::after {
+    transform: translateX(18px);
+  }
+
+  .analytics-hero {
+    min-height: 0;
+    padding: 16px;
+  }
+
+  .progress-ring,
+  .donut-chart {
+    width: 112px;
+  }
+
+  .progress-ring span {
+    width: 82px;
+    font-size: 1.05rem;
+  }
+
+  .donut-chart::after {
+    width: 68px;
+  }
+
+  .weekly-chart {
+    height: 150px;
+    gap: 8px;
+  }
+
+  .mood-grid {
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .mood-grid button {
+    min-height: 40px;
+    border-radius: 14px;
+    font-size: .82rem;
+  }
+
+  .profile-hero {
+    gap: 12px;
+    padding: 14px 16px;
+  }
+
+  .profile-avatar {
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+  }
+
+  .profile-avatar svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .profile-hero p {
+    margin-top: 2px;
+  }
+
+  .profile-controls {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 16px;
+  }
+
+  .profile-controls .secondary-button {
+    height: 40px;
+    justify-content: flex-start;
+    padding: 0 12px;
+    font-size: .82rem;
+  }
+
+  .profile-controls .language-toggle {
+    height: 40px;
+    align-self: stretch;
+  }
+
+  .profile-controls .secondary-button:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .profile-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .profile-stats .stat-card {
+    min-height: 92px;
+    padding: 12px;
+  }
+
+  .analytics-stats .stat-card {
+    min-height: 88px;
+    padding: 12px;
+  }
+
+  .badge-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .badge-item {
+    min-height: 48px;
+    padding: 10px;
+    border-radius: 14px;
+    font-size: .8rem;
+  }
+
+  .badge-item svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .empty-state {
+    min-height: 180px;
+    padding: 18px;
+  }
+
+  .modal-card {
+    padding: 16px;
+  }
+
+  .bottom-nav {
+    bottom: max(8px, env(safe-area-inset-bottom, 0px));
+    width: min(calc(100% - 20px), 430px);
+    border-radius: 20px;
+    padding: 6px;
+  }
+}
+
+  .bottom-nav button {
+    min-height: 48px;
+    gap: 2px;
+    padding: 5px 2px;
+    border-radius: 14px;
+    font-size: .64rem;
+  }
+
+  .bottom-nav svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .bottom-nav .add-nav-item svg {
+    width: 18px;
+    height: 18px;
+  }
+}
