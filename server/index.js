@@ -126,8 +126,14 @@ const ensureSchema = async () => {
       todo_id INTEGER NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
       author VARCHAR(100) NOT NULL DEFAULT 'Maya',
       content TEXT NOT NULL,
+      image_url TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
+  `);
+
+  await pool.query(`
+    ALTER TABLE todo_comments
+      ADD COLUMN IF NOT EXISTS image_url TEXT
   `);
 
   // 5. Seed default lists when table is empty
@@ -364,7 +370,7 @@ app.get("/api/todos/:id/comments", async (req, res) => {
   try {
     const { id } = req.params;
     const result = await pool.query(
-      "SELECT id, todo_id AS \"todoId\", author, content, created_at AS \"createdAt\" FROM todo_comments WHERE todo_id = $1 ORDER BY created_at ASC, id ASC",
+      "SELECT id, todo_id AS \"todoId\", author, content, image_url AS \"imageUrl\", created_at AS \"createdAt\" FROM todo_comments WHERE todo_id = $1 ORDER BY created_at ASC, id ASC",
       [id]
     );
     res.json(result.rows);
@@ -374,13 +380,14 @@ app.get("/api/todos/:id/comments", async (req, res) => {
 app.post("/api/todos/:id/comments", async (req, res) => {
   try {
     const { id } = req.params;
-    const content = req.body.content?.trim();
+    const content = req.body.content?.trim() || "";
     const author = req.body.author?.trim() || "Maya";
-    if (!content) return res.status(400).json({ message: "Comment content is required" });
+    const imageUrl = req.body.imageUrl?.trim() || null;
+    if (!content && !imageUrl) return res.status(400).json({ message: "Comment content or image is required" });
 
     const result = await pool.query(
-      "INSERT INTO todo_comments(todo_id, author, content) VALUES ($1, $2, $3) RETURNING id, todo_id AS \"todoId\", author, content, created_at AS \"createdAt\"",
-      [id, author, content]
+      "INSERT INTO todo_comments(todo_id, author, content, image_url) VALUES ($1, $2, $3, $4) RETURNING id, todo_id AS \"todoId\", author, content, image_url AS \"imageUrl\", created_at AS \"createdAt\"",
+      [id, author, content, imageUrl]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) { sendServerError(res, error); }

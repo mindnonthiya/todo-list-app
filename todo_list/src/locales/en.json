@@ -102,7 +102,8 @@
   "close": "Close",
   "note": "Note",
   "notePlaceholder": "Add supporting details, links, or acceptance criteria.",
-  "addList": "Add List",
+  "addList": "Add another list",
+  "addCard": "Add a card",
   "editList": "Edit List",
   "deleteList": "Delete List?",
   "deleteListWarning": "All tasks in this list will be moved to the first list.",
@@ -121,5 +122,11 @@
   "removeImage": "Remove Cover",
   "inList": "in list",
   "details": "Details",
+  "description": "Description",
+  "members": "Members",
+  "labels": "Labels",
+  "dates": "Dates",
+  "checklist": "Checklist",
+  "pasteImageTip": "Press Ctrl+V anywhere in this window to paste an image directly",
   "noCommentsYet": "No comments yet. Be the first to share an update!"
 }

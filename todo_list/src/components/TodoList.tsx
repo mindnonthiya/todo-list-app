@@ -22,6 +22,7 @@ import {
   Moon,
   MoreHorizontal,
   Palette,
+  Paperclip,
   Pencil,
   Plus,
   Search,
@@ -72,6 +73,7 @@ interface TodoComment {
   todoId: number;
   author: string;
   content: string;
+  imageUrl?: string | null;
   createdAt: string;
 }
 
@@ -496,7 +498,7 @@ export default function TodoList() {
   return (
     <main className="planner-app">
       <div className="planner-container">
-        {/* Sidebar */}
+        {/* Sidebar for Desktop */}
         <aside className="sidebar" aria-label="Primary navigation">
           <div className="brand-mark">
             <div className="brand-glyph" aria-hidden="true"><LayoutDashboard size={20} /></div>
@@ -521,14 +523,9 @@ export default function TodoList() {
 
         {/* Workspace Main Area */}
         <section className="workspace">
-          {/* Trello-Style Modern Topbar */}
+          {/* Trello-Style Clean Topbar */}
           <header className="topbar trello-topbar">
             <div className="topbar-left-group">
-              <div className="topbar-board-badge">
-                <LayoutDashboard size={18} className="board-badge-icon" />
-                <span className="board-badge-title">{t("workspace")}</span>
-              </div>
-
               {/* View Switcher Dropdown */}
               <div className="topbar-view-switcher" ref={viewDropdownRef}>
                 <button
@@ -568,7 +565,7 @@ export default function TodoList() {
             <div className="header-actions">
               {/* Search Field */}
               <div className="topbar-search-box">
-                <Search size={16} className="search-icon" />
+                <Search size={15} className="search-icon" />
                 <input
                   type="search"
                   value={search}
@@ -576,34 +573,35 @@ export default function TodoList() {
                   placeholder={t("searchPlaceholder")}
                   aria-label={t("searchPlaceholder")}
                 />
-                {search && <button type="button" className="clear-search-btn" onClick={() => setSearch("")}><X size={13} /></button>}
+                {search && <button type="button" className="clear-search-btn" onClick={() => setSearch("")}><X size={12} /></button>}
               </div>
 
-              {/* Prominent "+ Create" Button */}
+              {/* Prominent Desktop "+ Create" Button */}
               <button
                 type="button"
-                className="trello-create-button"
+                className="trello-create-button desktop-only-btn"
                 onClick={() => openCreateDialog()}
                 aria-label={t("create")}
               >
-                <Plus size={17} />
+                <Plus size={16} />
                 <span>{t("create")}</span>
               </button>
 
-              {/* Language Toggle */}
-              <LanguageToggle language={language} onChange={setLanguage} />
-
-              {/* Theme Toggle */}
+              {/* Dark / Light Theme Toggle (Always visible) */}
               <button
                 type="button"
                 className="theme-quick-button"
                 aria-label={t("theme")}
                 onClick={toggleTheme}
+                title={theme === "dark" ? t("light") : t("dark")}
               >
                 {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
               </button>
 
-              {/* User Area */}
+              {/* Language Switcher */}
+              <LanguageToggle language={language} onChange={setLanguage} />
+
+              {/* User Profile Avatar */}
               <div className="user-area">
                 <button
                   type="button"
@@ -618,7 +616,7 @@ export default function TodoList() {
               </div>
 
               {/* More Actions Menu */}
-              <div className="more-menu-container" ref={moreMenuRef}>
+              <div className="more-menu-container desktop-only-btn" ref={moreMenuRef}>
                 <button
                   type="button"
                   className="icon-btn more-btn"
@@ -749,7 +747,7 @@ export default function TodoList() {
         </section>
       </div>
 
-      {/* Bottom Navigation for Mobile */}
+      {/* Mobile Bottom Navigation Bar */}
       <Navigation activeView={activeView} labels={viewLabels} onChange={setActiveView} variant="bottom" onCreateClick={() => openCreateDialog()} />
 
       {/* Task Detail Modal (Trello Card Details with Comments & Cover) */}
@@ -1061,7 +1059,7 @@ function BoardView({
               ))}
 
               <button type="button" className="board-add-card" onClick={() => onAddCard(list.id)}>
-                <Plus size={16} /> {t("addTask")}
+                <Plus size={16} /> <span>{t("addCard")}</span>
               </button>
             </div>
           </div>
@@ -1087,7 +1085,7 @@ function BoardView({
         </div>
       ) : (
         <button type="button" className="board-add-list" onClick={() => setNewListMode(true)}>
-          <Plus size={20} /> {t("addList")}
+          <Plus size={18} /> <span>{t("addList")}</span>
         </button>
       )}
     </section>
@@ -1095,7 +1093,7 @@ function BoardView({
 }
 
 /* ============================================================ */
-/*  Task Detail Modal (Trello-style Card Details & Comments)     */
+/*  Task Detail Modal (Trello Card Details, Cover & Comments)    */
 /* ============================================================ */
 
 function TaskDetailModal({
@@ -1119,6 +1117,7 @@ function TaskDetailModal({
 }) {
   const [title, setTitle] = useState(todo.title);
   const [note, setNote] = useState(todo.note || "");
+  const [isEditingNote, setIsEditingNote] = useState(!todo.note);
   const [color, setColor] = useState<TaskColor>(normalizeColor(todo.color));
   const [priority, setPriority] = useState<Priority>(normalizePriority(todo.priority));
   const [category, setCategory] = useState<Category>(normalizeCategory(todo.category));
@@ -1127,14 +1126,16 @@ function TaskDetailModal({
   const [imageUrl, setImageUrl] = useState(todo.imageUrl || "");
   const [comments, setComments] = useState<TodoComment[]>([]);
   const [newComment, setNewComment] = useState("");
+  const [commentImage, setCommentImage] = useState<string | null>(null);
   const [isPostingComment, setIsPostingComment] = useState(false);
   const [isCommentsLoading, setIsCommentsLoading] = useState(true);
   const [showImageInput, setShowImageInput] = useState(false);
   const [imageInputUrl, setImageInputUrl] = useState("");
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const coverFileInputRef = useRef<HTMLInputElement>(null);
+  const commentFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch comments for this todo
+  // Fetch comments
   useEffect(() => {
     let isMounted = true;
     setIsCommentsLoading(true);
@@ -1155,7 +1156,7 @@ function TaskDetailModal({
     return () => { isMounted = false; };
   }, [todo.id]);
 
-  // Support Ctrl+V to paste image directly onto the card
+  // Support Ctrl+V anywhere in the modal to paste image
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -1169,8 +1170,13 @@ function TaskDetailModal({
             reader.onload = (uploadEvent) => {
               const base64Url = uploadEvent.target?.result as string;
               if (base64Url) {
-                setImageUrl(base64Url);
-                void onUpdate(todo.id, { imageUrl: base64Url });
+                // If comment box is focused or has text, attach to comment; otherwise set cover!
+                if (newComment.trim() || document.activeElement?.tagName === "TEXTAREA") {
+                  setCommentImage(base64Url);
+                } else {
+                  setImageUrl(base64Url);
+                  void onUpdate(todo.id, { imageUrl: base64Url });
+                }
               }
             };
             reader.readAsDataURL(file);
@@ -1182,9 +1188,9 @@ function TaskDetailModal({
 
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, [onUpdate, todo.id]);
+  }, [newComment, onUpdate, todo.id]);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
@@ -1194,6 +1200,18 @@ function TaskDetailModal({
           setImageUrl(base64Url);
           void onUpdate(todo.id, { imageUrl: base64Url });
         }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleCommentImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (uploadEvent) => {
+        const base64Url = uploadEvent.target?.result as string;
+        if (base64Url) setCommentImage(base64Url);
       };
       reader.readAsDataURL(file);
     }
@@ -1219,20 +1237,21 @@ function TaskDetailModal({
 
   const handlePostComment = async () => {
     const text = newComment.trim();
-    if (!text || isPostingComment) return;
+    if ((!text && !commentImage) || isPostingComment) return;
 
     setIsPostingComment(true);
     try {
       const res = await fetch(`${API_URL}/${todo.id}/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: text, author: "Maya" }),
+        body: JSON.stringify({ content: text, author: "Maya", imageUrl: commentImage }),
       });
 
       if (res.ok) {
         const createdComment = (await res.json()) as TodoComment;
         setComments((prev) => [...prev, createdComment]);
         setNewComment("");
+        setCommentImage(null);
       }
     } catch (err) {
       console.error("Failed to post comment", err);
@@ -1252,7 +1271,6 @@ function TaskDetailModal({
     }
   };
 
-
   return (
     <div className="modal-layer detail-modal-layer" role="presentation" onMouseDown={onClose}>
       <article
@@ -1261,36 +1279,45 @@ function TaskDetailModal({
         aria-modal="true"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        {/* Cover Header Banner */}
+        {/* Cover Header Banner (Trello style) */}
         {imageUrl ? (
           <div className="task-detail-cover">
-            <img src={imageUrl} alt="" />
+            <img src={imageUrl} alt="Card Cover" />
             <div className="cover-actions-overlay">
-              <button type="button" className="cover-action-btn" onClick={() => fileInputRef.current?.click()}>
-                <Upload size={14} /> <span>{t("uploadImage")}</span>
+              <button type="button" className="cover-action-btn" onClick={() => coverFileInputRef.current?.click()}>
+                <ImageIcon size={14} /> <span>{t("uploadImage")}</span>
               </button>
               <button type="button" className="cover-action-btn destructive" onClick={handleRemoveCover}>
                 <Trash2 size={14} /> <span>{t("removeImage")}</span>
               </button>
+              <button type="button" className="cover-action-btn close-btn-cover" onClick={onClose}>
+                <X size={16} />
+              </button>
             </div>
           </div>
         ) : (
-          <div className="task-detail-cover-empty">
-            <button type="button" className="cover-add-btn" onClick={() => fileInputRef.current?.click()}>
-              <ImageIcon size={16} /> <span>{t("coverImage")}</span>
-            </button>
-            <button type="button" className="cover-add-btn" onClick={() => setShowImageInput((prev) => !prev)}>
-              <Plus size={16} /> <span>URL</span>
+          <div className="task-detail-header-bar">
+            <div className="detail-top-tools">
+              <button type="button" className="cover-add-btn" onClick={() => coverFileInputRef.current?.click()}>
+                <ImageIcon size={15} /> <span>{t("coverImage")}</span>
+              </button>
+              <button type="button" className="cover-add-btn" onClick={() => setShowImageInput((prev) => !prev)}>
+                <Plus size={15} /> <span>URL</span>
+              </button>
+              <span className="ctrl-v-hint">{t("pasteImageTip")}</span>
+            </div>
+            <button type="button" className="icon-btn close-modal-btn" onClick={onClose} aria-label={t("close")}>
+              <X size={18} />
             </button>
           </div>
         )}
 
         <input
           type="file"
-          ref={fileInputRef}
+          ref={coverFileInputRef}
           style={{ display: "none" }}
           accept="image/*"
-          onChange={handleFileUpload}
+          onChange={handleCoverUpload}
         />
 
         {showImageInput && (
@@ -1306,33 +1333,8 @@ function TaskDetailModal({
           </div>
         )}
 
-        {/* Modal Header */}
+        {/* Modal Header Row */}
         <div className="detail-modal-header">
-          <div className="detail-title-row">
-            <button
-              type="button"
-              className="complete-button detail-complete-btn"
-              onClick={() => {
-                const next = !todo.completed;
-                void onUpdate(todo.id, { completed: next });
-              }}
-            >
-              {todo.completed ? <CheckCircle2 size={24} /> : <Circle size={24} />}
-            </button>
-
-            <input
-              className={`detail-title-input ${todo.completed ? "is-completed-text" : ""}`}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onBlur={() => { if (title.trim() && title !== todo.title) handleSaveField("title", title.trim()); }}
-              placeholder={t("title")}
-            />
-
-            <button type="button" className="icon-btn close-modal-btn" onClick={onClose} aria-label={t("close")}>
-              <X size={20} />
-            </button>
-          </div>
-
           <div className="detail-list-badge">
             <span>{t("inList")}</span>
             <select
@@ -1342,26 +1344,126 @@ function TaskDetailModal({
               {lists.map((l) => <option key={l.id} value={l.id}>{l.title}</option>)}
             </select>
           </div>
+
+          <div className="detail-title-row">
+            <button
+              type="button"
+              className={`detail-complete-checkmark ${todo.completed ? "is-done" : ""}`}
+              onClick={() => {
+                const next = !todo.completed;
+                void onUpdate(todo.id, { completed: next });
+              }}
+              title={todo.completed ? "Mark incomplete" : "Mark complete"}
+            >
+              <CheckCircle2 size={24} />
+            </button>
+
+            <input
+              className={`detail-title-input ${todo.completed ? "is-completed-text" : ""}`}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={() => { if (title.trim() && title !== todo.title) handleSaveField("title", title.trim()); }}
+              placeholder={t("title")}
+            />
+          </div>
+
+          {/* Members & Labels Bar (Trello Style) */}
+          <div className="detail-chips-bar">
+            <div className="detail-chip-group">
+              <span className="chip-label">{t("members")}</span>
+              <div className="member-pill"><User size={13} /> <span>Maya</span></div>
+            </div>
+
+            <div className="detail-chip-group">
+              <span className="chip-label">{t("labels")}</span>
+              <div className={`label-badge-pill color-${color}`} style={{ backgroundColor: COLOR_OPTIONS.find((c) => c.value === color)?.hex }}>
+                <span>{t(category)}</span>
+              </div>
+              <span className={`priority-badge-pill ${priority}`}>
+                <Flag size={12} /> {t(priority)}
+              </span>
+            </div>
+
+            <div className="detail-chip-group">
+              <span className="chip-label">{t("dates")}</span>
+              <div className="date-chip-pill">
+                <CalendarDays size={13} />
+                <span>{formatDateHeading(dueDate, dateLocale, true)}</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Detail Content Grid */}
         <div className="task-detail-grid">
-          {/* Main Left Column: Description & Comments */}
+          {/* Main Left Column */}
           <div className="detail-main-col">
-            {/* Description / Notes */}
+            {/* Description Section */}
             <div className="detail-section">
-              <label className="detail-section-title">
-                <Folder size={16} /> <span>{t("note")}</span>
-              </label>
-              <textarea
-                className="detail-note-input"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                onBlur={() => { if (note !== todo.note) handleSaveField("note", note); }}
-                placeholder={t("notePlaceholder")}
-                rows={3}
-              />
+              <div className="detail-section-header">
+                <div className="detail-section-title">
+                  <Folder size={16} /> <span>{t("description")}</span>
+                </div>
+                {!isEditingNote && (
+                  <button type="button" className="edit-section-btn" onClick={() => setIsEditingNote(true)}>
+                    <Pencil size={13} /> {t("editTask")}
+                  </button>
+                )}
+              </div>
+
+              {isEditingNote ? (
+                <div className="note-editor-wrap">
+                  <textarea
+                    className="detail-note-input"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder={t("notePlaceholder")}
+                    rows={4}
+                    autoFocus
+                  />
+                  <div className="note-editor-actions">
+                    <button
+                      type="button"
+                      className="save-button"
+                      onClick={() => {
+                        handleSaveField("note", note);
+                        setIsEditingNote(false);
+                      }}
+                    >
+                      <Check size={14} /> {t("save")}
+                    </button>
+                    <button type="button" className="secondary-button" onClick={() => setIsEditingNote(false)}>
+                      {t("cancel")}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="detail-note-display" onClick={() => setIsEditingNote(true)}>
+                  {note ? <p>{note}</p> : <p className="placeholder-text">{t("notePlaceholder")}</p>}
+                </div>
+              )}
             </div>
+
+            {/* Attachments Section (If card has cover/image) */}
+            {imageUrl && (
+              <div className="detail-section">
+                <div className="detail-section-title">
+                  <Paperclip size={16} /> <span>{t("coverImage")}</span>
+                </div>
+                <div className="attachment-card">
+                  <img src={imageUrl} alt="attachment" className="attachment-thumb" />
+                  <div className="attachment-info">
+                    <strong>ภาพหน้าปกการ์ด</strong>
+                    <small>แนบเรียบร้อยแล้ว</small>
+                    <div className="attachment-actions">
+                      <button type="button" className="attachment-action-btn" onClick={handleRemoveCover}>
+                        <Trash2 size={12} /> {t("removeImage")}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Comments & Activity Timeline */}
             <div className="detail-section comments-section">
@@ -1373,7 +1475,7 @@ function TaskDetailModal({
 
               {/* Add Comment Box */}
               <div className="comment-compose-box">
-                <div className="comment-avatar"><User size={18} /></div>
+                <div className="comment-avatar"><User size={16} /></div>
                 <div className="comment-compose-input-wrap">
                   <textarea
                     placeholder={t("writeComment")}
@@ -1386,11 +1488,38 @@ function TaskDetailModal({
                     }}
                     rows={2}
                   />
+
+                  {/* Real-time image preview in comment */}
+                  {commentImage && (
+                    <div className="comment-image-preview">
+                      <img src={commentImage} alt="comment-attachment" />
+                      <button type="button" className="remove-comment-img-btn" onClick={() => setCommentImage(null)}>
+                        <X size={13} />
+                      </button>
+                    </div>
+                  )}
+
                   <div className="comment-compose-actions">
                     <button
                       type="button"
+                      className="attach-btn"
+                      onClick={() => commentFileInputRef.current?.click()}
+                      title="Attach image or paste with Ctrl+V"
+                    >
+                      <Paperclip size={15} /> <span>แนบรูป</span>
+                    </button>
+                    <input
+                      type="file"
+                      ref={commentFileInputRef}
+                      style={{ display: "none" }}
+                      accept="image/*"
+                      onChange={handleCommentImageUpload}
+                    />
+
+                    <button
+                      type="submit"
                       className="save-button"
-                      disabled={!newComment.trim() || isPostingComment}
+                      disabled={(!newComment.trim() && !commentImage) || isPostingComment}
                       onClick={() => void handlePostComment()}
                     >
                       <Send size={14} /> <span>{t("postComment")}</span>
@@ -1408,7 +1537,7 @@ function TaskDetailModal({
                 ) : (
                   comments.map((comment) => (
                     <div key={comment.id} className="comment-bubble-item">
-                      <div className="comment-avatar"><User size={16} /></div>
+                      <div className="comment-avatar"><User size={15} /></div>
                       <div className="comment-bubble-content">
                         <div className="comment-bubble-header">
                           <strong>{comment.author}</strong>
@@ -1422,7 +1551,12 @@ function TaskDetailModal({
                             <Trash2 size={12} />
                           </button>
                         </div>
-                        <p className="comment-bubble-text">{comment.content}</p>
+                        {comment.content && <p className="comment-bubble-text">{comment.content}</p>}
+                        {comment.imageUrl && (
+                          <div className="comment-bubble-img-wrap">
+                            <img src={comment.imageUrl} alt="attached screenshot" loading="lazy" />
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))
@@ -1433,7 +1567,7 @@ function TaskDetailModal({
 
           {/* Right Sidebar Column: Properties */}
           <aside className="detail-sidebar-col">
-            {/* Priority */}
+            {/* Priority Selector */}
             <div className="detail-prop-card">
               <label><Flag size={14} /> <span>{t("priority")}</span></label>
               <select
@@ -1448,7 +1582,7 @@ function TaskDetailModal({
               </select>
             </div>
 
-            {/* Category */}
+            {/* Category Selector */}
             <div className="detail-prop-card">
               <label><Folder size={14} /> <span>{t("category")}</span></label>
               <select
@@ -1516,7 +1650,7 @@ function TaskDetailModal({
                   onDelete(todo);
                 }}
               >
-                <Trash2 size={16} /> <span>{t("delete")}</span>
+                <Trash2 size={15} /> <span>{t("delete")}</span>
               </button>
             </div>
           </aside>
@@ -1527,7 +1661,7 @@ function TaskDetailModal({
 }
 
 /* ============================================================ */
-/*  Task Form (Modal Create / Edit)                              */
+/*  Task Form (Modal Create with Instant Image Preview)          */
 /* ============================================================ */
 
 function TaskForm({
@@ -1566,6 +1700,32 @@ function TaskForm({
     }
   };
 
+  // Support Ctrl+V paste directly on create form
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith("image/")) {
+          const file = items[i].getAsFile();
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+              const base64 = ev.target?.result as string;
+              if (base64) updateField("imageUrl", base64);
+            };
+            reader.readAsDataURL(file);
+          }
+          break;
+        }
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, []);
+
   return (
     <form className={compact ? "task-form compact cardless" : "task-form card"} onSubmit={(event) => { event.preventDefault(); void onSubmit(); }}>
       {lists && lists.length > 0 && (
@@ -1575,6 +1735,16 @@ function TaskForm({
             {lists.map((l) => <option key={l.id} value={l.id}>{l.title}</option>)}
           </select>
         </label>
+      )}
+
+      {/* Real-time Image Preview Banner if Image exists */}
+      {form.imageUrl && (
+        <div className="form-live-image-preview">
+          <img src={form.imageUrl} alt="preview" />
+          <button type="button" className="remove-preview-btn" onClick={() => updateField("imageUrl", "")} title="Remove image">
+            <X size={15} />
+          </button>
+        </div>
       )}
 
       <div className="form-grid two">
@@ -1592,10 +1762,10 @@ function TaskForm({
 
       <label>
         {t("note")}
-        <textarea value={form.note} onChange={(event) => updateField("note", event.target.value)} placeholder={t("notePlaceholder")} />
+        <textarea value={form.note} onChange={(event) => updateField("note", event.target.value)} placeholder={t("notePlaceholder")} rows={3} />
       </label>
 
-      {/* Image Cover Input */}
+      {/* Image Cover Input & Upload */}
       <div className="form-image-attachment">
         <label>{t("coverImage")}</label>
         <div className="form-image-row">
@@ -1610,12 +1780,7 @@ function TaskForm({
           </button>
           <input type="file" ref={filePickerRef} style={{ display: "none" }} accept="image/*" onChange={handleImageFile} />
         </div>
-        {form.imageUrl && (
-          <div className="form-image-preview">
-            <img src={form.imageUrl} alt="preview" />
-            <button type="button" className="remove-preview-btn" onClick={() => updateField("imageUrl", "")}><X size={14} /></button>
-          </div>
-        )}
+        <small className="form-paste-hint">{t("pasteImageTip")}</small>
       </div>
 
       <div className="form-grid two">
@@ -1673,7 +1838,7 @@ function TaskForm({
 /* ============================================================ */
 
 function CalendarPanel({ days, monthLabel, taskDates, dateLocale, t, onPrevious, onNext, onSelect }: { days: CalendarDay[]; monthLabel: string; taskDates: Set<string>; dateLocale: string; t: (key: TranslationKey) => string; onPrevious: () => void; onNext: () => void; onSelect: (date: Date) => void }) {
-  return <section className="calendar-card card"><div className="calendar-header"><div><span className="eyebrow">{t("monthPlanner")}</span><h2>{monthLabel}</h2></div><div className="month-actions"><button type="button" aria-label={t("previousMonth")} onClick={onPrevious}><ChevronLeft size={18} /></button><button type="button" aria-label={t("nextMonth")} onClick={onNext}><ChevronRight size={18} /></button></div></div><div className="weekday-grid" aria-hidden="true">{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <span key={day}>{day}</span>)}</div><div className="calendar-grid">{days.map((day) => <button key={day.key} type="button" className={`${day.isOutside ? "is-outside" : ""} ${day.isToday ? "is-today" : ""} ${day.isSelected ? "is-selected" : ""}`} onClick={() => onSelect(day.date)} aria-label={day.date.toLocaleDateString(dateLocale, { month: "long", day: "numeric", year: "numeric" })}><span>{day.date.getDate()}</span>{taskDates.has(toDateInputValue(day.date)) && <i aria-hidden="true" />}</button>)}</div></section>;
+  return <section className="calendar-card card"><div className="calendar-header"><div><span className="eyebrow">{t("monthPlanner")}</span><h2>{monthLabel}</h2></div><div className="month-actions"><button type="button" aria-label={t("previousMonth")} onClick={onPrevious}><ChevronLeft size={18} /></button><button type="button" aria-label={t("nextMonth")} onClick={onNext}><ChevronRight size={18} /></button></div></div><div className="weekday-grid" aria-hidden="true">{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <span key={day}>{day}</span>)}</div><div className="calendar-grid">{days.map((day) => <button key={day.key} type="button" className={`${day.isOutside ? "is-outside" : ""} ${day.isToday ? "is-today" : ""} ${day.isSelected ? "is-selected" : ""}`} onClick={() => onSelect(day.date)} aria-label={day.date.toLocaleDateString(dateLocale, { month: "long", day: "numeric", year: "numeric" })}><span>{day.date.getDate()}</span>{taskDates.has(toDateInputValue(day.date)) && <i aria-hidden="true" />}<div className="day-number-label">{day.date.getDate()}</div></button>)}</div></section>;
 }
 
 function TaskPreview({ title, todos, t, dateLocale, isLoading, onAdd, onToggle, onOpenDetail }: { title: string; todos: Todo[]; t: (key: TranslationKey) => string; dateLocale: string; isLoading: boolean; onAdd: () => void; onToggle: (todo: Todo) => void; onOpenDetail: (todo: Todo) => void }) {
