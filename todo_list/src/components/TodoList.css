@@ -547,7 +547,7 @@ textarea:focus-visible {
   background: var(--primary);
 }
 
-/* User Profile Badge Desktop (Clean inline pill, no popup needed) */
+/* User Profile Badge Desktop */
 .user-profile-badge {
   display: inline-flex;
   align-items: center;
@@ -623,7 +623,7 @@ textarea:focus-visible {
   padding: 0;
 }
 
-/* Mobile Drawer (Hamburger Menu Sheet) */
+/* Mobile Drawer */
 .mobile-drawer-layer {
   position: fixed;
   inset: 0;
@@ -758,7 +758,7 @@ textarea:focus-visible {
 .priority-badge-pill.urgent    { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
 
 /* ============================================================ */
-/*  Board View (Kanban with Smooth Transitions & Drop Indicator) */
+/*  Board View (Kanban with Touch/Mouse Drag & Drop)             */
 /* ============================================================ */
 
 .board-view {
@@ -870,7 +870,6 @@ textarea:focus-visible {
   font-size: 0.82rem;
 }
 
-/* Independent Column Scrolling */
 .board-column-body {
   flex: 1 1 auto;
   overflow-y: auto;
@@ -882,17 +881,22 @@ textarea:focus-visible {
   scrollbar-width: thin;
 }
 
-/* Board Cards with Smooth Drag Motion */
 .board-card {
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--surface-raised);
-  cursor: pointer;
+  cursor: grab;
   overflow: hidden;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.04);
   transition: transform 180ms cubic-bezier(0.2, 0, 0, 1), box-shadow 180ms ease, opacity 180ms ease, border-color 180ms ease;
   position: relative;
   flex-shrink: 0;
+  user-select: none;
+  touch-action: pan-y;
+}
+
+.board-card:active {
+  cursor: grabbing;
 }
 
 .board-card:hover {
@@ -902,11 +906,10 @@ textarea:focus-visible {
 }
 
 .board-card.is-dragging {
-  opacity: 0.25;
+  opacity: 0.35;
   transform: scale(0.96);
 }
 
-/* Live Drop Indicator Line */
 .board-card.card-drag-target {
   border-color: var(--primary) !important;
   box-shadow: 0 0 0 1px var(--primary), 0 4px 14px rgba(239, 68, 68, 0.35) !important;
@@ -916,7 +919,6 @@ textarea:focus-visible {
   opacity: 0.6;
 }
 
-/* Compact Card Cover Thumbnail */
 .board-card-cover {
   width: 100%;
   max-height: 90px;
@@ -932,7 +934,6 @@ textarea:focus-visible {
   display: block;
 }
 
-/* 4px Vibrant Card Color Strip */
 .board-card-color {
   width: 100%;
   height: 4px;
@@ -978,7 +979,6 @@ textarea:focus-visible {
 .drag-handle {
   flex-shrink: 0;
   color: var(--border-strong);
-  cursor: grab;
 }
 
 .board-card-note {
@@ -1021,16 +1021,32 @@ textarea:focus-visible {
 .board-card-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   margin-top: 5px;
   padding-top: 4px;
   border-top: 1px solid var(--border);
 }
 
+.mobile-column-quick-shift {
+  display: none;
+}
+
+.shift-btn {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
 .board-card-move {
   margin-left: auto;
   font-size: 0.72rem;
-  padding: 1px 4px;
+  padding: 2px 5px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--panel);
@@ -1038,7 +1054,6 @@ textarea:focus-visible {
   cursor: pointer;
 }
 
-/* + Add a card button inside column */
 .board-add-card {
   width: 100%;
   padding: 6px 8px;
@@ -1047,9 +1062,7 @@ textarea:focus-visible {
   background: transparent;
   color: var(--muted-strong);
   display: flex;
-  flex-direction: row;
   align-items: center;
-  justify-content: flex-start;
   gap: 6px;
   font-weight: 600;
   font-size: 0.82rem;
@@ -1064,7 +1077,6 @@ textarea:focus-visible {
   color: var(--ink);
 }
 
-/* + Add another list column button */
 .board-add-list {
   flex: 0 0 270px;
   min-width: 270px;
@@ -1117,7 +1129,7 @@ textarea:focus-visible {
 }
 
 /* ============================================================ */
-/*  Calendar Planner View (Matching Screenshot 2 - Trello style) */
+/*  Calendar Planner Multi-View (Month, Week, Day, Agenda)       */
 /* ============================================================ */
 
 .calendar-planner-wrapper {
@@ -1145,17 +1157,42 @@ textarea:focus-visible {
   gap: 8px;
 }
 
+.cal-month-badge-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
 .cal-month-badge {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 10px;
+  padding: 5px 12px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--ink);
   font-weight: 700;
   font-size: 0.84rem;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.cal-month-badge:hover {
+  border-color: var(--primary);
+  background: var(--surface);
+}
+
+.cal-badge-chevron {
+  color: var(--muted);
+}
+
+.cal-hidden-month-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
 }
 
 .cal-nav-btn-group {
@@ -1204,12 +1241,20 @@ textarea:focus-visible {
 .cal-view-btn {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 8px;
+  gap: 6px;
+  padding: 5px 10px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--ink);
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+
+.cal-active-view-text {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--primary);
 }
 
 .cal-view-menu-dropdown {
@@ -1254,6 +1299,11 @@ textarea:focus-visible {
   background: var(--panel);
 }
 
+.cal-view-menu-dropdown button.is-selected-view {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
 .cal-board-title-pill {
   display: flex;
   align-items: center;
@@ -1266,6 +1316,7 @@ textarea:focus-visible {
   font-size: 0.82rem;
 }
 
+/* Month Layout */
 .cal-planner-layout {
   display: grid;
   grid-template-columns: minmax(0, 68%) minmax(280px, 32%);
@@ -1513,6 +1564,299 @@ textarea:focus-visible {
   gap: 5px;
   margin-top: 5px;
   font-size: 0.7rem;
+  color: var(--muted);
+}
+
+/* ============================================================ */
+/*  Week View Styles                                            */
+/* ============================================================ */
+
+.cal-week-view-wrapper {
+  padding: 12px;
+  overflow-x: auto;
+}
+
+.cal-week-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(130px, 1fr));
+  gap: 8px;
+  min-width: 800px;
+}
+
+.cal-week-col {
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  padding: 8px 6px;
+  gap: 6px;
+  min-height: 340px;
+}
+
+.cal-week-col.is-today {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary-soft) 25%, var(--surface));
+}
+
+.cal-week-col-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cal-week-day-name {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.cal-week-day-num {
+  font-size: 1.1rem;
+  color: var(--ink);
+}
+
+.cal-today-badge {
+  font-size: 0.6rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+}
+
+.cal-week-col-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.cal-week-task-card {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-left: 3px solid var(--task-color, var(--primary));
+  cursor: pointer;
+  transition: transform 150ms ease;
+}
+
+.cal-week-task-card:hover {
+  transform: translateY(-1px);
+}
+
+.cal-week-task-card.is-done {
+  opacity: 0.6;
+}
+
+.cal-week-task-top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cal-week-task-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cal-week-time {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.cal-week-add-btn {
+  margin-top: auto;
+  padding: 4px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+}
+
+.cal-week-add-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* ============================================================ */
+/*  Day View Styles                                             */
+/* ============================================================ */
+
+.cal-day-view-wrapper {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cal-day-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cal-day-view-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.cal-day-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cal-day-timeline-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-left: 4px solid var(--task-color, var(--primary));
+  cursor: pointer;
+  transition: transform 150ms ease;
+}
+
+.cal-day-timeline-card:hover {
+  transform: translateX(3px);
+}
+
+.cal-day-timeline-card.is-completed {
+  opacity: 0.6;
+}
+
+.cal-day-card-body {
+  flex: 1;
+}
+
+.cal-day-card-body h4 {
+  margin: 0;
+  font-size: 0.94rem;
+  color: var(--ink);
+}
+
+.cal-day-card-body p {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+/* ============================================================ */
+/*  Agenda View Styles                                          */
+/* ============================================================ */
+
+.cal-agenda-wrapper {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cal-agenda-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cal-agenda-header h3 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.cal-agenda-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cal-agenda-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cal-agenda-date-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--panel);
+  font-size: 0.84rem;
+  color: var(--ink);
+}
+
+.cal-agenda-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 8px;
+}
+
+.cal-agenda-item-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-left: 3px solid var(--task-color, var(--primary));
+  cursor: pointer;
+  transition: transform 120ms ease;
+}
+
+.cal-agenda-item-card:hover {
+  transform: translateX(2px);
+}
+
+.cal-agenda-item-card.is-completed {
+  opacity: 0.6;
+}
+
+.cal-agenda-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.cal-agenda-item-content strong {
+  font-size: 0.88rem;
+  display: block;
+}
+
+.cal-agenda-item-content p {
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.cal-agenda-item-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
   color: var(--muted);
 }
 
@@ -2312,7 +2656,6 @@ textarea:focus-visible {
   background: var(--primary-soft);
 }
 
-/* Modern Toggle Switch Slider for Alarm */
 .alarm-box {
   display: flex;
   flex-direction: column;
@@ -2440,7 +2783,7 @@ textarea:focus-visible {
 }
 
 /* ============================================================ */
-/*  Tasks View & Analytics Shared Views                          */
+/*  Tasks View & Dark Mode Button Colors                         */
 /* ============================================================ */
 
 .card {
@@ -2548,11 +2891,12 @@ textarea:focus-visible {
 .task-card {
   display: flex;
   gap: 7px;
-  padding: 9px;
+  padding: 9px 12px;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--surface-raised);
   cursor: pointer;
+  align-items: flex-start;
 }
 
 .task-content {
@@ -2563,6 +2907,7 @@ textarea:focus-visible {
 .task-content h3 {
   margin: 0;
   font-size: 0.86rem;
+  color: var(--ink);
 }
 
 .task-meta {
@@ -2583,9 +2928,42 @@ textarea:focus-visible {
   background: var(--panel);
 }
 
+.task-card .task-move-select {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--ink);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Fix Dark Mode White Boxes on Task Actions */
 .task-actions {
   display: flex;
-  gap: 2px;
+  gap: 4px;
+  align-items: center;
+  margin-left: 6px;
+}
+
+.task-actions button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.task-actions button:hover {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--primary);
 }
 
 /* Analytics View */
@@ -2935,6 +3313,11 @@ textarea:focus-visible {
     padding: 1px 4px;
   }
 
+  .mobile-column-quick-shift {
+    display: flex;
+    gap: 2px;
+  }
+
   .board-add-card {
     padding: 5px 6px;
     font-size: 0.78rem;
@@ -2987,6 +3370,10 @@ textarea:focus-visible {
   .cal-task-pill {
     font-size: 0.62rem;
     padding: 1px 2px;
+  }
+
+  .cal-week-grid {
+    min-width: 600px;
   }
 
   /* Task Detail Modal on Mobile */

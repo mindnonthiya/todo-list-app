@@ -158,16 +158,16 @@ const MOOD_OPTIONS: Array<{ value: Mood; key: "happy" | "calm" | "tired" | "moti
 
 const priorityRank: Record<Priority, number> = { normal: 1, important: 2, urgent: 3 };
 
-const createDefaultFormState = (boardId: number | null = null, listId: number | null = null): TaskFormState => ({
+const createDefaultFormState = (boardId: number | null = null, listId: number | null = null, defaultDate: string = todayKey): TaskFormState => ({
   title: "",
   note: "",
   color: "red",
   priority: "important",
   category: "work",
-  dueDate: todayKey,
+  dueDate: defaultDate,
   dueTime: "09:00",
   alarmEnabled: false,
-  alarmDate: todayKey,
+  alarmDate: defaultDate,
   alarmTime: "09:00",
   boardId,
   listId,
@@ -196,7 +196,7 @@ export default function TodoList() {
   const [sortMode, setSortMode] = useState<SortMode>("newest");
   const [search, setSearch] = useState("");
   const [activeView, setActiveView] = useState<PlannerView>("board");
-  const [currentMonth, setCurrentMonth] = useState(() => new Date());
+  const [currentDate, setCurrentDate] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(todayKey);
   const [calendarViewMode, setCalendarViewMode] = useState<CalendarViewMode>("month");
   const [calendarViewMenuOpen, setCalendarViewMenuOpen] = useState(false);
@@ -297,7 +297,7 @@ export default function TodoList() {
 
   const today = useMemo(() => new Date(), []);
   const stats = useMemo(() => buildStats(todos, today), [today, todos]);
-  const calendarDays = useMemo(() => buildCalendarDays(currentMonth, selectedDate), [currentMonth, selectedDate]);
+  const calendarDays = useMemo(() => buildCalendarDays(currentDate, selectedDate), [currentDate, selectedDate]);
 
   const visibleTodos = useMemo(() => {
     const normalizedQuery = search.trim().toLowerCase();
@@ -525,8 +525,8 @@ export default function TodoList() {
 
   /* ---- Modal / Action Handlers ---- */
 
-  const openCreateDialog = useCallback((targetListId?: number) => {
-    setForm(createDefaultFormState(activeBoardId, targetListId ?? (lists[0]?.id || null)));
+  const openCreateDialog = useCallback((targetListId?: number, defaultDate?: string) => {
+    setForm(createDefaultFormState(activeBoardId, targetListId ?? (lists[0]?.id || null), defaultDate || todayKey));
     setDialogMode("create");
     window.setTimeout(() => inputRef.current?.focus(), 120);
   }, [activeBoardId, lists]);
@@ -575,7 +575,56 @@ export default function TodoList() {
     setDetailTodo(null);
   }, []);
 
-  const monthLabel = currentMonth.toLocaleDateString(dateLocale, { month: "short", year: "numeric" });
+  // Navigation handlers for calendar view
+  const handleCalendarPrev = () => {
+    setCurrentDate((prev) => {
+      const d = new Date(prev);
+      if (calendarViewMode === "day") {
+        d.setDate(d.getDate() - 1);
+        setSelectedDate(toDateInputValue(d));
+      } else if (calendarViewMode === "week") {
+        d.setDate(d.getDate() - 7);
+        setSelectedDate(toDateInputValue(d));
+      } else {
+        d.setMonth(d.getMonth() - 1);
+      }
+      return d;
+    });
+  };
+
+  const handleCalendarNext = () => {
+    setCurrentDate((prev) => {
+      const d = new Date(prev);
+      if (calendarViewMode === "day") {
+        d.setDate(d.getDate() + 1);
+        setSelectedDate(toDateInputValue(d));
+      } else if (calendarViewMode === "week") {
+        d.setDate(d.getDate() + 7);
+        setSelectedDate(toDateInputValue(d));
+      } else {
+        d.setMonth(d.getMonth() + 1);
+      }
+      return d;
+    });
+  };
+
+  const handleCalendarToday = () => {
+    const now = new Date();
+    setCurrentDate(now);
+    setSelectedDate(todayKey);
+  };
+
+  const handleMonthPickerChange = (yearMonth: string) => {
+    if (!yearMonth) return;
+    const [year, month] = yearMonth.split("-").map(Number);
+    if (year && month) {
+      const nextDate = new Date(year, month - 1, 1);
+      setCurrentDate(nextDate);
+      setSelectedDate(toDateInputValue(nextDate));
+    }
+  };
+
+  const monthLabel = currentDate.toLocaleDateString(dateLocale, { month: "short", year: "numeric" });
 
   /* ---- Render ---- */
 
@@ -818,11 +867,12 @@ export default function TodoList() {
             />
           )}
 
-          {/* Calendar View (Trello Planner Style with Real Cards inside days) */}
+          {/* Calendar View (100% Functional Multi-View: Month, Week, Day, Agenda) */}
           {activeView === "calendar" && (
             <CalendarPlannerView
               boardTitle={currentBoard.title}
               todos={todos}
+              currentDate={currentDate}
               selectedDate={selectedDate}
               calendarDays={calendarDays}
               viewMode={calendarViewMode}
@@ -832,13 +882,14 @@ export default function TodoList() {
               t={t}
               isLoading={isLoading}
               onSelectDate={(dateStr) => setSelectedDate(dateStr)}
-              onPrevMonth={() => setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
-              onNextMonth={() => setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
-              onToday={() => { setCurrentMonth(new Date()); setSelectedDate(todayKey); }}
+              onPrev={handleCalendarPrev}
+              onNext={handleCalendarNext}
+              onToday={handleCalendarToday}
+              onMonthPickerChange={handleMonthPickerChange}
               onSetViewMode={(mode) => { setCalendarViewMode(mode); setCalendarViewMenuOpen(false); }}
               onToggleViewMenu={() => setCalendarViewMenuOpen((prev) => !prev)}
               onOpenDetail={openDetailModal}
-              onAddCard={() => openCreateDialog()}
+              onAddCard={(dateStr) => openCreateDialog(undefined, dateStr)}
               onToggleTodo={(todo) => void updateTodo(todo.id, { completed: !todo.completed })}
             />
           )}
@@ -1047,7 +1098,7 @@ function Navigation({ activeView, labels, onChange, variant, onCreateClick }: { 
 }
 
 /* ============================================================ */
-/*  Board View — Kanban (Smooth Live Drag & Drop)                */
+/*  Board View — Kanban (Touch & Mouse Drag + 1-Click Mobile Move) */
 /* ============================================================ */
 
 function BoardView({
@@ -1089,11 +1140,43 @@ function BoardView({
   const [editListId, setEditListId] = useState<number | null>(null);
   const [editListTitle, setEditListTitle] = useState("");
 
+  // Touch Drag-and-Drop state for Mobile
+  const touchActiveRef = useRef<{ id: number; startX: number; startY: number } | null>(null);
+
+  const handleTouchStart = (todoId: number, e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    touchActiveRef.current = { id: todoId, startX: touch.clientX, startY: touch.clientY };
+    setDragId(todoId);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchActiveRef.current) return;
+    const touch = e.touches[0];
+    const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (!targetEl) return;
+
+    const columnEl = targetEl.closest<HTMLElement>("[data-column-id]");
+    if (columnEl) {
+      const colId = Number(columnEl.getAttribute("data-column-id"));
+      if (colId) setOverListId(colId);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (touchActiveRef.current && overListId !== null) {
+      onMoveCard(touchActiveRef.current.id, overListId);
+    }
+    touchActiveRef.current = null;
+    setDragId(null);
+    setOverListId(null);
+    setOverCardId(null);
+  };
+
   if (isLoading) return <div className="board-view"><SkeletonList /><SkeletonList /><SkeletonList /></div>;
 
   return (
     <section className="board-view" aria-label={t("board")}>
-      {lists.map((list) => {
+      {lists.map((list, listIndex) => {
         const cards = todos
           .filter((td) => td.listId === list.id)
           .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
@@ -1102,6 +1185,7 @@ function BoardView({
         return (
           <div
             key={list.id}
+            data-column-id={list.id}
             className={`board-column ${isDragOver ? "drag-over" : ""}`}
             onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
             onDragEnter={() => setOverListId(list.id)}
@@ -1171,6 +1255,9 @@ function BoardView({
                       setOverCardId(null);
                     }
                   }}
+                  onTouchStart={(e) => handleTouchStart(todo.id, e)}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
                   onClick={() => onOpenDetail(todo)}
                 >
                   {/* Compact Card Cover Thumbnail if attached */}
@@ -1217,6 +1304,31 @@ function BoardView({
                     <div className="board-card-actions" onClick={(e) => e.stopPropagation()}>
                       <button type="button" className="icon-btn" onClick={() => onEdit(todo)} aria-label="Edit title"><Pencil size={12} /></button>
                       <button type="button" className="icon-btn" onClick={() => onDelete(todo)} aria-label="Delete"><Trash2 size={12} /></button>
+
+                      {/* Quick Move Previous / Next Column Buttons for Mobile */}
+                      <div className="mobile-column-quick-shift">
+                        {listIndex > 0 && (
+                          <button
+                            type="button"
+                            className="shift-btn"
+                            title="Move left"
+                            onClick={() => onMoveCard(todo.id, lists[listIndex - 1].id)}
+                          >
+                            <ChevronLeft size={13} />
+                          </button>
+                        )}
+                        {listIndex < lists.length - 1 && (
+                          <button
+                            type="button"
+                            className="shift-btn"
+                            title="Move right"
+                            onClick={() => onMoveCard(todo.id, lists[listIndex + 1].id)}
+                          >
+                            <ChevronRight size={13} />
+                          </button>
+                        )}
+                      </div>
+
                       <select
                         className="board-card-move"
                         value={todo.listId ?? ""}
@@ -1265,12 +1377,13 @@ function BoardView({
 }
 
 /* ============================================================ */
-/*  Calendar Planner View (Matching Screenshot 2 - Trello style) */
+/*  Calendar Planner Multi-View (Month, Week, Day, Agenda)       */
 /* ============================================================ */
 
 function CalendarPlannerView({
   boardTitle,
   todos,
+  currentDate,
   selectedDate,
   calendarDays,
   viewMode,
@@ -1280,9 +1393,10 @@ function CalendarPlannerView({
   t,
   isLoading,
   onSelectDate,
-  onPrevMonth,
-  onNextMonth,
+  onPrev,
+  onNext,
   onToday,
+  onMonthPickerChange,
   onSetViewMode,
   onToggleViewMenu,
   onOpenDetail,
@@ -1291,6 +1405,7 @@ function CalendarPlannerView({
 }: {
   boardTitle: string;
   todos: Todo[];
+  currentDate: Date;
   selectedDate: string;
   calendarDays: CalendarDay[];
   viewMode: CalendarViewMode;
@@ -1300,18 +1415,20 @@ function CalendarPlannerView({
   t: (key: TranslationKey) => string;
   isLoading: boolean;
   onSelectDate: (dateStr: string) => void;
-  onPrevMonth: () => void;
-  onNextMonth: () => void;
+  onPrev: () => void;
+  onNext: () => void;
   onToday: () => void;
+  onMonthPickerChange: (yearMonth: string) => void;
   onSetViewMode: (mode: CalendarViewMode) => void;
   onToggleViewMenu: () => void;
   onOpenDetail: (todo: Todo) => void;
-  onAddCard: () => void;
+  onAddCard: (dateStr?: string) => void;
   onToggleTodo: (todo: Todo) => void;
 }) {
+  const monthInputRef = useRef<HTMLInputElement>(null);
   const selectedDateTasks = todos.filter((todo) => getTodoDueDate(todo) === selectedDate);
 
-  // Group tasks by date for fast lookup in month grid
+  // Group tasks by date for fast lookup
   const tasksByDate = useMemo(() => {
     const map = new Map<string, Todo[]>();
     for (const todo of todos) {
@@ -1322,53 +1439,124 @@ function CalendarPlannerView({
     return map;
   }, [todos]);
 
+  // Week days for Week View
+  const weekDays = useMemo(() => {
+    const d = new Date(currentDate);
+    const dayOfWeek = d.getDay(); // 0 is Sunday
+    const startOfWeek = new Date(d);
+    startOfWeek.setDate(d.getDate() - dayOfWeek);
+
+    return Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(startOfWeek);
+      date.setDate(startOfWeek.getDate() + i);
+      const key = toDateInputValue(date);
+      return {
+        key,
+        date,
+        dayName: date.toLocaleDateString("en-US", { weekday: "short" }),
+        isToday: key === todayKey,
+        isSelected: key === selectedDate,
+      };
+    });
+  }, [currentDate, selectedDate]);
+
+  // Group all tasks for Agenda View
+  const agendaList = useMemo(() => {
+    const sorted = [...todos].sort((a, b) => getTodoDueDate(a).localeCompare(getTodoDueDate(b)));
+    const groups: Array<{ dateKey: string; dateFormatted: string; items: Todo[] }> = [];
+
+    for (const todo of sorted) {
+      const dateKey = getTodoDueDate(todo);
+      const existing = groups.find((g) => g.dateKey === dateKey);
+      if (existing) {
+        existing.items.push(todo);
+      } else {
+        groups.push({
+          dateKey,
+          dateFormatted: formatDateHeading(dateKey, dateLocale),
+          items: [todo],
+        });
+      }
+    }
+    return groups;
+  }, [todos, dateLocale]);
+
+  // Dynamic View Label
+  const headerViewTitle = useMemo(() => {
+    if (viewMode === "day") {
+      return formatDateHeading(selectedDate, dateLocale);
+    }
+    if (viewMode === "week") {
+      const start = weekDays[0].date.toLocaleDateString(dateLocale, { month: "short", day: "numeric" });
+      const end = weekDays[6].date.toLocaleDateString(dateLocale, { month: "short", day: "numeric" });
+      return `${start} - ${end}`;
+    }
+    return monthLabel;
+  }, [viewMode, selectedDate, dateLocale, weekDays, monthLabel]);
+
   return (
     <section className="calendar-planner-wrapper" aria-label="Calendar Planner">
       {/* Top Toolbar Matching Screenshot 2 */}
       <div className="cal-planner-topbar">
         <div className="cal-topbar-left">
-          {/* Month selector button */}
-          <button type="button" className="cal-month-badge">
-            <Calendar size={14} />
-            <span>{monthLabel}</span>
-          </button>
+          {/* Month / Period Picker Button */}
+          <div className="cal-month-badge-wrap">
+            <button
+              type="button"
+              className="cal-month-badge"
+              onClick={() => monthInputRef.current?.showPicker?.() || monthInputRef.current?.click()}
+              title="Select Month / Year"
+            >
+              <Calendar size={14} />
+              <span>{headerViewTitle}</span>
+              <ChevronDown size={12} className="cal-badge-chevron" />
+            </button>
+            <input
+              type="month"
+              ref={monthInputRef}
+              className="cal-hidden-month-input"
+              value={`${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, "0")}`}
+              onChange={(e) => onMonthPickerChange(e.target.value)}
+            />
+          </div>
 
-          {/* Month navigation buttons */}
+          {/* Navigation Buttons: < Today > */}
           <div className="cal-nav-btn-group">
-            <button type="button" className="cal-nav-btn" onClick={onPrevMonth} aria-label="Previous Month">
+            <button type="button" className="cal-nav-btn" onClick={onPrev} aria-label="Previous">
               <ChevronLeft size={15} />
             </button>
             <button type="button" className="cal-today-btn" onClick={onToday}>
               Today
             </button>
-            <button type="button" className="cal-nav-btn" onClick={onNextMonth} aria-label="Next Month">
+            <button type="button" className="cal-nav-btn" onClick={onNext} aria-label="Next">
               <ChevronRight size={15} />
             </button>
           </div>
 
-          {/* View mode dropdown */}
+          {/* View Mode Dropdown: Day, Week, Month, Agenda */}
           <div className="cal-view-selector-wrap">
-            <button type="button" className="cal-view-btn" onClick={onToggleViewMenu}>
+            <button type="button" className="cal-view-btn" onClick={onToggleViewMenu} aria-label="Change View">
               <CalendarDays size={14} />
+              <span className="cal-active-view-text">{viewMode.toUpperCase()}</span>
               <ChevronDown size={12} />
             </button>
 
             {viewMenuOpen && (
               <div className="cal-view-menu-dropdown">
                 <div className="cal-menu-header">Change view</div>
-                <button type="button" onClick={() => onSetViewMode("day")}>
+                <button type="button" className={viewMode === "day" ? "is-selected-view" : ""} onClick={() => onSetViewMode("day")}>
                   <Calendar size={13} /> <span>Day</span>
                   {viewMode === "day" && <Check size={13} className="check-active" />}
                 </button>
-                <button type="button" onClick={() => onSetViewMode("week")}>
+                <button type="button" className={viewMode === "week" ? "is-selected-view" : ""} onClick={() => onSetViewMode("week")}>
                   <CalendarDays size={13} /> <span>Week</span>
                   {viewMode === "week" && <Check size={13} className="check-active" />}
                 </button>
-                <button type="button" onClick={() => onSetViewMode("month")}>
+                <button type="button" className={viewMode === "month" ? "is-selected-view" : ""} onClick={() => onSetViewMode("month")}>
                   <Calendar size={13} /> <span>Month</span>
                   {viewMode === "month" && <Check size={13} className="check-active" />}
                 </button>
-                <button type="button" onClick={() => onSetViewMode("agenda")}>
+                <button type="button" className={viewMode === "agenda" ? "is-selected-view" : ""} onClick={() => onSetViewMode("agenda")}>
                   <ListTodo size={13} /> <span>Agenda</span>
                   {viewMode === "agenda" && <Check size={13} className="check-active" />}
                 </button>
@@ -1377,7 +1565,7 @@ function CalendarPlannerView({
           </div>
         </div>
 
-        {/* Board Title Label on Topbar Right (Matching Screenshot 2) */}
+        {/* Board Title Label on Topbar Right */}
         <div className="cal-topbar-right">
           <div className="cal-board-title-pill">
             <LayoutDashboard size={13} />
@@ -1386,125 +1574,293 @@ function CalendarPlannerView({
         </div>
       </div>
 
-      {/* Main 2-Column Calendar & Day Tasks Layout */}
-      <div className="cal-planner-layout">
-        {/* Left / Main: Month Grid with Real Task Cards inside Days */}
-        <div className="cal-grid-card card">
-          {/* Weekday Row */}
-          <div className="cal-weekday-header">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-              <div key={day} className="cal-weekday-col">{day}</div>
-            ))}
+      {/* ============================================================ */}
+      {/* 1. MONTH VIEW                                                */}
+      {/* ============================================================ */}
+      {viewMode === "month" && (
+        <div className="cal-planner-layout">
+          {/* Month Grid */}
+          <div className="cal-grid-card card">
+            <div className="cal-weekday-header">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                <div key={day} className="cal-weekday-col">{day}</div>
+              ))}
+            </div>
+
+            <div className="cal-month-days-grid">
+              {calendarDays.map((day) => {
+                const dayStr = toDateInputValue(day.date);
+                const dayTasks = tasksByDate.get(dayStr) || [];
+
+                return (
+                  <div
+                    key={day.key}
+                    className={`cal-day-cell ${day.isOutside ? "is-outside" : ""} ${day.isToday ? "is-today" : ""} ${day.isSelected ? "is-selected" : ""}`}
+                    onClick={() => onSelectDate(dayStr)}
+                  >
+                    <div className="cal-day-num-row">
+                      <span className="cal-day-number">{day.date.getDate()}</span>
+                      {dayTasks.length > 0 && <span className="cal-day-task-count">{dayTasks.length}</span>}
+                    </div>
+
+                    <div className="cal-cell-tasks-list">
+                      {dayTasks.slice(0, 2).map((td) => (
+                        <div
+                          key={td.id}
+                          className={`cal-task-pill color-${normalizeColor(td.color)} ${td.completed ? "is-done" : ""}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenDetail(td);
+                          }}
+                          title={td.title}
+                        >
+                          {td.completed ? <CheckCircle2 size={10} className="chip-icon check" /> : <Circle size={10} className="chip-icon" />}
+                          <span className="chip-title">{td.title}</span>
+                        </div>
+                      ))}
+                      {dayTasks.length > 2 && (
+                        <div className="cal-more-pill">+{dayTasks.length - 2} more</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          {/* 35/42 Days Grid */}
-          <div className="cal-month-days-grid">
-            {calendarDays.map((day) => {
-              const dayStr = toDateInputValue(day.date);
-              const dayTasks = tasksByDate.get(dayStr) || [];
+          {/* Right Column: Inspector */}
+          <div className="cal-inspector-column">
+            <div className="cal-planner-hero-card">
+              <h3>Planner</h3>
+              <p>งานในบอร์ด <strong>{boardTitle}</strong></p>
+              <button type="button" className="cal-add-task-btn" onClick={() => onAddCard(selectedDate)}>
+                <Plus size={14} /> <span>{t("addTask")}</span>
+              </button>
+            </div>
 
+            <div className="cal-selected-day-card card">
+              <div className="cal-selected-day-header">
+                <div>
+                  <span className="eyebrow">{t("selectedDay")}</span>
+                  <h4>{formatDateHeading(selectedDate, dateLocale)}</h4>
+                </div>
+                <span className="count-pill">{selectedDateTasks.length}</span>
+              </div>
+
+              <div className="cal-day-tasks-stream">
+                {isLoading ? (
+                  <SkeletonList compact />
+                ) : selectedDateTasks.length === 0 ? (
+                  <p className="muted-empty">{t("noTasksDate")}</p>
+                ) : (
+                  selectedDateTasks.map((td) => (
+                    <div
+                      key={td.id}
+                      className={`cal-inspector-card color-${normalizeColor(td.color)} ${td.completed ? "is-completed" : ""}`}
+                      onClick={() => onOpenDetail(td)}
+                    >
+                      <div className="cal-card-row">
+                        <button
+                          type="button"
+                          className="complete-button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleTodo(td);
+                          }}
+                        >
+                          {td.completed ? <CheckCircle2 size={15} /> : <Circle size={15} />}
+                        </button>
+                        <strong className={td.completed ? "is-completed-text" : ""}>{td.title}</strong>
+                      </div>
+                      {td.note && <p className="cal-card-note">{td.note}</p>}
+                      <div className="cal-card-meta">
+                        <span className={`priority-badge ${normalizePriority(td.priority)}`}><Flag size={10} /> {t(normalizePriority(td.priority))}</span>
+                        {td.dueTime && <span><Clock size={10} /> {td.dueTime}</span>}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* 2. WEEK VIEW                                                 */}
+      {/* ============================================================ */}
+      {viewMode === "week" && (
+        <div className="cal-week-view-wrapper card">
+          <div className="cal-week-grid">
+            {weekDays.map((wDay) => {
+              const dayTasks = tasksByDate.get(wDay.key) || [];
               return (
-                <div
-                  key={day.key}
-                  className={`cal-day-cell ${day.isOutside ? "is-outside" : ""} ${day.isToday ? "is-today" : ""} ${day.isSelected ? "is-selected" : ""}`}
-                  onClick={() => onSelectDate(dayStr)}
-                >
-                  <div className="cal-day-num-row">
-                    <span className="cal-day-number">{day.date.getDate()}</span>
-                    {dayTasks.length > 0 && <span className="cal-day-task-count">{dayTasks.length}</span>}
+                <div key={wDay.key} className={`cal-week-col ${wDay.isToday ? "is-today" : ""}`}>
+                  <div className="cal-week-col-header">
+                    <span className="cal-week-day-name">{wDay.dayName}</span>
+                    <strong className="cal-week-day-num">{wDay.date.getDate()}</strong>
+                    {wDay.isToday && <span className="cal-today-badge">TODAY</span>}
                   </div>
 
-                  {/* Render Task Cards directly inside the calendar cell */}
-                  <div className="cal-cell-tasks-list">
-                    {dayTasks.slice(0, 2).map((td) => (
+                  <div className="cal-week-col-tasks">
+                    {dayTasks.map((td) => (
                       <div
                         key={td.id}
-                        className={`cal-task-pill color-${normalizeColor(td.color)} ${td.completed ? "is-done" : ""}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOpenDetail(td);
-                        }}
-                        title={td.title}
+                        className={`cal-week-task-card color-${normalizeColor(td.color)} ${td.completed ? "is-done" : ""}`}
+                        onClick={() => onOpenDetail(td)}
                       >
-                        {td.completed ? <CheckCircle2 size={10} className="chip-icon check" /> : <Circle size={10} className="chip-icon" />}
-                        <span className="chip-title">{td.title}</span>
+                        <div className="cal-week-task-top">
+                          <button
+                            type="button"
+                            className="complete-button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onToggleTodo(td);
+                            }}
+                          >
+                            {td.completed ? <CheckCircle2 size={13} /> : <Circle size={13} />}
+                          </button>
+                          <span className="cal-week-task-title">{td.title}</span>
+                        </div>
+                        {td.dueTime && <small className="cal-week-time"><Clock size={10} /> {td.dueTime}</small>}
                       </div>
                     ))}
-                    {dayTasks.length > 2 && (
-                      <div className="cal-more-pill">+{dayTasks.length - 2} more</div>
-                    )}
+
+                    <button
+                      type="button"
+                      className="cal-week-add-btn"
+                      onClick={() => onAddCard(wDay.key)}
+                      title="Add task on this day"
+                    >
+                      <Plus size={13} />
+                    </button>
                   </div>
                 </div>
               );
             })}
           </div>
         </div>
+      )}
 
-        {/* Right Column: Selected Day Tasks Inspector */}
-        <div className="cal-inspector-column">
-          {/* Top Banner */}
-          <div className="cal-planner-hero-card">
-            <h3>Planner</h3>
-            <p>งานในบอร์ด <strong>{boardTitle}</strong></p>
-            <button type="button" className="cal-add-task-btn" onClick={onAddCard}>
-              <Plus size={14} /> <span>{t("addTask")}</span>
+      {/* ============================================================ */}
+      {/* 3. DAY VIEW                                                  */}
+      {/* ============================================================ */}
+      {viewMode === "day" && (
+        <div className="cal-day-view-wrapper card">
+          <div className="cal-day-view-header">
+            <div>
+              <span className="eyebrow">{t("selectedDay")}</span>
+              <h2>{formatDateHeading(selectedDate, dateLocale)}</h2>
+            </div>
+            <button type="button" className="primary-button" onClick={() => onAddCard(selectedDate)}>
+              <Plus size={15} /> {t("addTask")}
             </button>
           </div>
 
-          {/* Selected Day Task List */}
-          <div className="cal-selected-day-card card">
-            <div className="cal-selected-day-header">
-              <div>
-                <span className="eyebrow">{t("selectedDay")}</span>
-                <h4>{formatDateHeading(selectedDate, dateLocale)}</h4>
+          <div className="cal-day-timeline">
+            {selectedDateTasks.length === 0 ? (
+              <div className="empty-state">
+                <Calendar size={32} />
+                <h3>{t("noTasksDate")}</h3>
+                <button type="button" onClick={() => onAddCard(selectedDate)}>{t("addTask")}</button>
               </div>
-              <span className="count-pill">{selectedDateTasks.length}</span>
-            </div>
-
-            <div className="cal-day-tasks-stream">
-              {isLoading ? (
-                <SkeletonList compact />
-              ) : selectedDateTasks.length === 0 ? (
-                <p className="muted-empty">{t("noTasksDate")}</p>
-              ) : (
-                selectedDateTasks.map((td) => (
-                  <div
-                    key={td.id}
-                    className={`cal-inspector-card color-${normalizeColor(td.color)} ${td.completed ? "is-completed" : ""}`}
-                    onClick={() => onOpenDetail(td)}
+            ) : (
+              selectedDateTasks.map((td) => (
+                <div
+                  key={td.id}
+                  className={`cal-day-timeline-card color-${normalizeColor(td.color)} ${td.completed ? "is-completed" : ""}`}
+                  onClick={() => onOpenDetail(td)}
+                >
+                  <button
+                    type="button"
+                    className="complete-button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleTodo(td);
+                    }}
                   >
-                    <div className="cal-card-row">
-                      <button
-                        type="button"
-                        className="complete-button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onToggleTodo(td);
-                        }}
-                      >
-                        {td.completed ? <CheckCircle2 size={15} /> : <Circle size={15} />}
-                      </button>
-                      <strong className={td.completed ? "is-completed-text" : ""}>{td.title}</strong>
-                    </div>
+                    {td.completed ? <CheckCircle2 size={18} /> : <Circle size={18} />}
+                  </button>
 
-                    {td.note && <p className="cal-card-note">{td.note}</p>}
-
+                  <div className="cal-day-card-body">
+                    <h4>{td.title}</h4>
+                    {td.note && <p>{td.note}</p>}
                     <div className="cal-card-meta">
-                      <span className={`priority-badge ${normalizePriority(td.priority)}`}>
-                        <Flag size={10} /> {t(normalizePriority(td.priority))}
-                      </span>
-                      {td.dueTime && <span><Clock size={10} /> {td.dueTime}</span>}
-                      {Boolean(td.commentsCount && td.commentsCount > 0) && (
-                        <span className="comment-badge"><MessageSquare size={10} /> {td.commentsCount}</span>
-                      )}
+                      <span className={`priority-badge ${normalizePriority(td.priority)}`}><Flag size={11} /> {t(normalizePriority(td.priority))}</span>
+                      <span><Folder size={11} /> {t(normalizeCategory(td.category))}</span>
+                      {td.dueTime && <span><Clock size={11} /> {td.dueTime}</span>}
                     </div>
                   </div>
-                ))
-              )}
-            </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
-      </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* 4. AGENDA VIEW                                               */}
+      {/* ============================================================ */}
+      {viewMode === "agenda" && (
+        <div className="cal-agenda-wrapper card">
+          <div className="cal-agenda-header">
+            <h3>Agenda & Upcoming Tasks</h3>
+            <button type="button" className="primary-button" onClick={() => onAddCard(selectedDate)}>
+              <Plus size={15} /> {t("addTask")}
+            </button>
+          </div>
+
+          <div className="cal-agenda-timeline">
+            {agendaList.length === 0 ? (
+              <div className="empty-state">
+                <ListTodo size={32} />
+                <h3>{t("noTasksFound")}</h3>
+              </div>
+            ) : (
+              agendaList.map((group) => (
+                <div key={group.dateKey} className="cal-agenda-group">
+                  <div className="cal-agenda-date-divider">
+                    <Calendar size={14} />
+                    <strong>{group.dateFormatted}</strong>
+                    <span className="count-pill">{group.items.length}</span>
+                  </div>
+
+                  <div className="cal-agenda-items-list">
+                    {group.items.map((td) => (
+                      <div
+                        key={td.id}
+                        className={`cal-agenda-item-card color-${normalizeColor(td.color)} ${td.completed ? "is-completed" : ""}`}
+                        onClick={() => onOpenDetail(td)}
+                      >
+                        <button
+                          type="button"
+                          className="complete-button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleTodo(td);
+                          }}
+                        >
+                          {td.completed ? <CheckCircle2 size={16} /> : <Circle size={16} />}
+                        </button>
+
+                        <div className="cal-agenda-item-content">
+                          <strong className={td.completed ? "is-completed-text" : ""}>{td.title}</strong>
+                          {td.note && <p>{td.note}</p>}
+                        </div>
+
+                        <div className="cal-agenda-item-badges">
+                          <span className={`priority-badge ${normalizePriority(td.priority)}`}><Flag size={10} /> {t(normalizePriority(td.priority))}</span>
+                          {td.dueTime && <span><Clock size={10} /> {td.dueTime}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -1557,7 +1913,6 @@ function TaskDetailModal({
   const dataImageFileInputRef = useRef<HTMLInputElement>(null);
   const commentFileInputRef = useRef<HTMLInputElement>(null);
 
-  // List cards count for position selector
   const currentListCards = useMemo(() => {
     return allTodos.filter((t) => t.listId === (todo.listId ?? lists[0]?.id));
   }, [allTodos, todo.listId, lists]);
@@ -1748,7 +2103,6 @@ function TaskDetailModal({
         aria-modal="true"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        {/* Cover Header Banner (if cover selected) */}
         {imageUrl && (
           <div className="task-detail-cover">
             <img src={imageUrl} alt="Card Cover" />
@@ -1763,7 +2117,6 @@ function TaskDetailModal({
           </div>
         )}
 
-        {/* Modal Top Header Bar with List & Position Selectors */}
         <div className="trello-modal-top-bar">
           <div className="detail-list-badge-group">
             <div className="detail-list-badge">
@@ -1796,7 +2149,6 @@ function TaskDetailModal({
           </div>
         </div>
 
-        {/* Modal Main Title Row */}
         <div className="detail-modal-header">
           <div className="detail-title-row">
             <button
@@ -1820,7 +2172,6 @@ function TaskDetailModal({
             />
           </div>
 
-          {/* Quick Action Chips & Metadata */}
           <div className="detail-chips-bar">
             <div className="detail-chip-group">
               <span className="chip-label">{t("members")}</span>
@@ -1844,7 +2195,7 @@ function TaskDetailModal({
 
               <select
                 className="color-pill-select"
-                style={{ border: "none", borderRadius: "6px", padding: "3px 6px", background: "var(--panel)", color: "inherit", cursor: "pointer", fontSize: "0.76rem", fontWeight: 700 }}
+                style={{ border: "none", borderRadius: "6px", padding: "2px 6px", background: "var(--panel)", color: "inherit", cursor: "pointer", fontSize: "0.74rem", fontWeight: 700 }}
                 value={color}
                 onChange={(e) => {
                   const val = e.target.value as TaskColor;
@@ -1887,11 +2238,8 @@ function TaskDetailModal({
           </div>
         </div>
 
-        {/* 2-Column Main Workspace Layout */}
         <div className="trello-modal-2col-layout">
-          {/* Left Column (60-65%): Description & Data Images */}
           <div className="trello-col-left">
-            {/* Description Section */}
             <div className="trello-section">
               <div className="trello-section-header">
                 <div className="trello-section-title">
@@ -1930,7 +2278,6 @@ function TaskDetailModal({
               )}
             </div>
 
-            {/* Attachments / Data Images Gallery Section */}
             <div className="trello-section">
               <div className="trello-section-header">
                 <div className="trello-section-title">
@@ -1979,13 +2326,11 @@ function TaskDetailModal({
             </div>
           </div>
 
-          {/* Right Column (35-40%): Comments & Activity Timeline */}
           <div className="trello-col-right">
             <div className="trello-section-title">
               <MessageSquare size={16} /> <span>{t("comments")}</span>
             </div>
 
-            {/* Comment Box */}
             <div className="trello-comment-box">
               <textarea
                 className="comment-textarea"
@@ -2000,7 +2345,6 @@ function TaskDetailModal({
                 rows={3}
               />
 
-              {/* Comment Image Attachment Preview */}
               {commentImage && (
                 <div className="comment-img-preview-card">
                   <img src={commentImage} alt="preview" />
@@ -2038,7 +2382,6 @@ function TaskDetailModal({
               </div>
             </div>
 
-            {/* Comment Timeline Stream */}
             <div className="trello-comments-stream">
               {isCommentsLoading ? (
                 <div className="skeleton-list compact"><span /><span /></div>
@@ -2047,9 +2390,7 @@ function TaskDetailModal({
               ) : (
                 comments.map((c) => (
                   <div key={c.id} className="trello-comment-item">
-                    <div className="comment-user-avatar">
-                      <User size={16} />
-                    </div>
+                    <div className="comment-user-avatar"><User size={16} /></div>
                     <div className="comment-body">
                       <div className="comment-header-row">
                         <strong>{c.author}</strong>
@@ -2105,7 +2446,6 @@ function TaskDetailModal({
                         c.content && <p className="comment-text-display">{c.content}</p>
                       )}
 
-                      {/* Comment Image Screenshot Display */}
                       {c.imageUrl && (
                         <div className="comment-screenshot-preview">
                           <img src={c.imageUrl} alt="comment attachment" loading="lazy" />
@@ -2117,7 +2457,6 @@ function TaskDetailModal({
               )}
             </div>
 
-            {/* Delete Card Button */}
             <div className="trello-sidebar-bottom-actions">
               <button
                 type="button"
@@ -2180,7 +2519,6 @@ function TaskForm({
     }
   };
 
-  // Support Ctrl+V paste directly on create form
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -2223,7 +2561,6 @@ function TaskForm({
         </label>
       )}
 
-      {/* Real-time Image Previews if Images exist */}
       {form.images.length > 0 && (
         <div className="form-images-preview-grid">
           {form.images.map((img, idx) => (
@@ -2260,7 +2597,6 @@ function TaskForm({
         <textarea value={form.note} onChange={(event) => updateField("note", event.target.value)} placeholder={t("notePlaceholder")} rows={3} />
       </label>
 
-      {/* Image Attachments Upload */}
       <div className="form-image-attachment">
         <label>{t("attachments")}</label>
         <div className="form-image-row">
@@ -2303,7 +2639,6 @@ function TaskForm({
         </fieldset>
       </div>
 
-      {/* Modern Toggle Switch Slider for Alarm */}
       <section className="alarm-box" aria-label={t("reminder")}>
         <div className="alarm-box-header">
           <div className="alarm-title-group">
@@ -2383,8 +2718,8 @@ function TaskCard({ todo, t, dateLocale, lists, onEdit, onToggle, onDelete, onMo
         </div>
       </div>
       <div className="task-actions" onClick={(e) => e.stopPropagation()}>
-        <button type="button" onClick={onEdit} aria-label={t("editTask")}><Pencil size={15} /></button>
-        <button type="button" onClick={onDelete} aria-label={t("delete")}><Trash2 size={15} /></button>
+        <button type="button" onClick={onEdit} aria-label={t("editTask")}><Pencil size={14} /></button>
+        <button type="button" onClick={onDelete} aria-label={t("delete")}><Trash2 size={14} /></button>
       </div>
     </article>
   );
