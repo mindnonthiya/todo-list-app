@@ -285,11 +285,18 @@ const DEFAULT_INITIAL_COMMENTS: TodoComment[] = [
   {
     id: 1,
     todoId: 1,
-    author: "Nonthiya (mj.)",
+    author: "Workspace User",
     content: "ยินดีต้อนรับ สามารถกด Ctrl+V เพื่อวางรูปภาพในนี้ได้ทันที",
     createdAt: new Date().toISOString(),
   },
 ];
+
+function stripEmojis(str?: string | null): string {
+  if (!str) return "";
+  return str
+    .replace(/[\u{1F000}-\u{1F9FF}\u{1FA00}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F300}-\u{1F5FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2300}-\u{23FF}\u{2B50}\u{2B55}\u{2934}\u{2935}\u{25AA}\u{25AB}\u{25B6}\u{25C0}\u{25FB}-\u{25FE}]/gu, "")
+    .trim();
+}
 
 /* ============================================================ */
 /*  Main Component (Pure Client-Side Local Storage Architecture) */
@@ -299,16 +306,21 @@ export default function TodoList() {
   const { t, language, setLanguage } = useLanguage();
   const { theme, toggleTheme } = useTheme();
 
-  // User & Settings state
-  const [userName, setUserName] = useState(() => localStorage.getItem("todo_user_name") || "Nonthiya (mj.)");
+  // User & Settings state (Individual & Isolated per device/browser)
+  const [userName, setUserName] = useState(() => {
+    const saved = localStorage.getItem("todo_user_name");
+    if (!saved || saved === "Nonthiya (mj.)") return "Workspace User";
+    return stripEmojis(saved);
+  });
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem("todo_sound_enabled") !== "false");
   const [accentColor, setAccentColor] = useState<AccentColor>(() => (localStorage.getItem("todo_accent_color") as AccentColor) || "red");
   const [firstDayOfWeek, setFirstDayOfWeek] = useState<"sun" | "mon">(() => (localStorage.getItem("todo_first_day") as "sun" | "mon") || "sun");
 
-  // Local Storage Data States (Individual & Isolated per device/browser)
+  // Local Storage Data States (Automatically sanitizes any legacy cached emojis)
   const [boards, setBoards] = useState<Board[]>(() => {
     const saved = localStorage.getItem("todo_planner_boards");
-    return saved ? (JSON.parse(saved) as Board[]) : DEFAULT_INITIAL_BOARDS;
+    const raw = saved ? (JSON.parse(saved) as Board[]) : DEFAULT_INITIAL_BOARDS;
+    return raw.map((b) => ({ ...b, title: stripEmojis(b.title) }));
   });
 
   const [activeBoardId, setActiveBoardId] = useState<number>(() => {
@@ -324,17 +336,20 @@ export default function TodoList() {
 
   const [lists, setLists] = useState<BoardList[]>(() => {
     const saved = localStorage.getItem("todo_planner_lists");
-    return saved ? (JSON.parse(saved) as BoardList[]) : DEFAULT_INITIAL_LISTS;
+    const raw = saved ? (JSON.parse(saved) as BoardList[]) : DEFAULT_INITIAL_LISTS;
+    return raw.map((l) => ({ ...l, title: stripEmojis(l.title) }));
   });
 
   const [todos, setTodos] = useState<Todo[]>(() => {
     const saved = localStorage.getItem("todo_planner_todos");
-    return saved ? (JSON.parse(saved) as Todo[]).map(normalizeTodo) : DEFAULT_INITIAL_TODOS.map(normalizeTodo);
+    const raw = saved ? (JSON.parse(saved) as Todo[]) : DEFAULT_INITIAL_TODOS;
+    return raw.map((t) => ({ ...normalizeTodo(t), title: stripEmojis(t.title), note: stripEmojis(t.note) }));
   });
 
   const [comments, setComments] = useState<TodoComment[]>(() => {
     const saved = localStorage.getItem("todo_planner_comments");
-    return saved ? (JSON.parse(saved) as TodoComment[]) : DEFAULT_INITIAL_COMMENTS;
+    const raw = saved ? (JSON.parse(saved) as TodoComment[]) : DEFAULT_INITIAL_COMMENTS;
+    return raw.map((c) => ({ ...c, content: stripEmojis(c.content) }));
   });
 
   const [boardDropdownOpen, setBoardDropdownOpen] = useState(false);
@@ -843,7 +858,7 @@ export default function TodoList() {
                   title="Switch board"
                 >
                   <LayoutDashboard size={16} className="board-icon" />
-                  <strong className="board-title-truncate">{currentBoard.title}</strong>
+                  <strong className="board-title-truncate">{stripEmojis(currentBoard.title)}</strong>
                   <ChevronDown size={14} className={`dropdown-arrow ${boardDropdownOpen ? "open" : ""}`} />
                 </button>
 
@@ -862,7 +877,7 @@ export default function TodoList() {
                           }}
                         >
                           <LayoutDashboard size={14} />
-                          <span>{b.title}</span>
+                          <span>{stripEmojis(b.title)}</span>
                           {b.id === activeBoardId && <Check size={14} className="check-active" />}
                         </button>
                       ))}
@@ -896,17 +911,6 @@ export default function TodoList() {
 
             {/* Right Action Tools */}
             <div className="header-actions">
-              {/* User Guide Button */}
-              <button
-                type="button"
-                className="user-guide-btn desktop-only-btn"
-                onClick={() => setDialogMode("guide")}
-                title={t("userGuide")}
-              >
-                <HelpCircle size={15} />
-                <span>{t("userGuide")}</span>
-              </button>
-
               {/* Search Field */}
               <div className="topbar-search-box">
                 <Search size={15} className="search-icon" />
@@ -937,12 +941,18 @@ export default function TodoList() {
               </div>
 
               {/* Desktop User Profile Badge */}
-              <div className="user-profile-badge desktop-only-btn">
+              <button
+                type="button"
+                className="user-profile-badge desktop-only-btn"
+                onClick={() => setActiveView("settings")}
+                title={t("userProfile")}
+                style={{ cursor: "pointer", border: "1px solid var(--border)", background: "transparent" }}
+              >
                 <User size={14} className="user-badge-icon" />
                 <span>{userName}</span>
-              </div>
+              </button>
 
-              {/* Desktop Hamburger Menu (☰) */}
+              {/* Desktop Hamburger Menu */}
               <div className="more-menu-container desktop-only-btn" ref={desktopMenuRef}>
                 <button
                   type="button"
@@ -977,7 +987,7 @@ export default function TodoList() {
                 )}
               </div>
 
-              {/* Mobile Hamburger Menu (☰) */}
+              {/* Mobile Hamburger Menu */}
               <button
                 type="button"
                 className="mobile-hamburger-btn"
@@ -1200,6 +1210,7 @@ export default function TodoList() {
           allTodos={todos}
           comments={comments.filter((c) => c.todoId === detailTodo.id)}
           lists={currentBoardLists}
+          userName={userName}
           t={t}
           dateLocale={dateLocale}
           onClose={closeDetailModal}
@@ -1370,49 +1381,46 @@ function AppLogo({ size = 32 }: { size?: number }) {
       viewBox="0 0 48 48"
       width={size}
       height={size}
+      fill="none"
       className="app-brand-logo-svg"
       aria-hidden="true"
     >
       <defs>
-        <linearGradient id="logoBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="var(--primary, #ef4444)" />
-          <stop offset="50%" stopColor="var(--primary-strong, #dc2626)" />
-          <stop offset="100%" stopColor="#991b1b" />
+        <linearGradient id="cleanLogoBg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ff6b6b" />
+          <stop offset="60%" stopColor="var(--primary, #ee4040)" />
+          <stop offset="100%" stopColor="var(--primary-strong, #c92a2a)" />
         </linearGradient>
-        <linearGradient id="logoCheckGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        
+        <linearGradient id="cleanTileGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.32" />
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0.08" />
+        </linearGradient>
+
+        <linearGradient id="cleanCheckStroke" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#ffffff" />
-          <stop offset="100%" stopColor="#fee2e2" />
+          <stop offset="100%" stopColor="#fff5f5" />
         </linearGradient>
-        <linearGradient id="logoBarGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
-          <stop offset="100%" stopColor="#ffffff" stopOpacity="0.5" />
-        </linearGradient>
-        <filter id="logoGlow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#000000" floodOpacity="0.25" />
+
+        <filter id="cleanLogoGlow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="var(--primary, #ee4040)" floodOpacity="0.35" />
         </filter>
       </defs>
 
-      {/* Squircle Base with Glow */}
-      <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#logoBgGrad)" filter="url(#logoGlow)" />
+      {/* Outer Rounded Squircle Base */}
+      <rect x="3" y="3" width="42" height="42" rx="13" fill="url(#cleanLogoBg)" filter="url(#cleanLogoGlow)" />
       
-      {/* Subtle Highlight Edge */}
-      <rect x="3" y="3" width="42" height="42" rx="11" fill="none" stroke="#ffffff" strokeWidth="1" strokeOpacity="0.25" />
+      {/* Subtle Highlight Border */}
+      <rect x="3.5" y="3.5" width="41" height="41" rx="12.5" stroke="#ffffff" strokeWidth="1" strokeOpacity="0.3" fill="none" />
 
-      {/* Geometric Layered Planner Bars */}
-      <rect x="12" y="14" width="24" height="4" rx="2" fill="url(#logoBarGrad)" />
-      <rect x="12" y="22" width="18" height="4" rx="2" fill="url(#logoBarGrad)" />
-      <rect x="12" y="30" width="12" height="4" rx="2" fill="url(#logoBarGrad)" />
+      {/* Left Accent Task Tile */}
+      <rect x="11" y="13" width="8" height="22" rx="4" fill="url(#cleanTileGrad)" stroke="#ffffff" strokeWidth="0.8" strokeOpacity="0.2" />
 
-      {/* Prominent Dynamic Checkmark Crest */}
-      <path
-        d="M22 31.5 L28.5 37.5 L40 18"
-        fill="none"
-        stroke="url(#logoCheckGrad)"
-        strokeWidth="4.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        filter="url(#logoGlow)"
-      />
+      {/* Right Floating Task Card */}
+      <rect x="22" y="13" width="15" height="22" rx="4" fill="url(#cleanTileGrad)" stroke="#ffffff" strokeWidth="0.8" strokeOpacity="0.2" />
+
+      {/* Precision Checkmark Crest */}
+      <path d="M14 24.5 L20.5 31 L34 16.5" stroke="url(#cleanCheckStroke)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -1602,7 +1610,7 @@ function BoardView({
               ) : (
                 <>
                   <div className="board-column-title">
-                    <h3>{list.title}</h3>
+                    <h3>{stripEmojis(list.title)}</h3>
                     <span className="board-column-count">{cards.length}</span>
                   </div>
                   <div className="board-column-actions">
@@ -1672,11 +1680,11 @@ function BoardView({
                       >
                         {todo.completed ? <CheckCircle2 size={15} /> : <Circle size={15} />}
                       </button>
-                      <h4 className={todo.completed ? "is-completed-text" : ""}>{todo.title}</h4>
+                      <h4 className={todo.completed ? "is-completed-text" : ""}>{stripEmojis(todo.title)}</h4>
                       <GripVertical size={13} className="drag-handle" aria-hidden="true" />
                     </div>
 
-                    {todo.note && <p className="board-card-note">{todo.note}</p>}
+                    {todo.note && <p className="board-card-note">{stripEmojis(todo.note)}</p>}
 
                     <div className="board-card-meta">
                       <span className={`priority-badge ${normalizePriority(todo.priority)}`}>
@@ -2839,6 +2847,7 @@ function TaskDetailModal({
   allTodos,
   comments,
   lists,
+  userName = "Workspace User",
   t,
   dateLocale,
   onClose,
@@ -2853,6 +2862,7 @@ function TaskDetailModal({
   allTodos: Todo[];
   comments: TodoComment[];
   lists: BoardList[];
+  userName?: string;
   t: (key: TranslationKey) => string;
   dateLocale: string;
   onClose: () => void;
@@ -3084,7 +3094,7 @@ function TaskDetailModal({
           <div className="detail-chips-bar">
             <div className="detail-chip-group">
               <span className="chip-label">{t("members")}</span>
-              <div className="member-pill"><User size={13} /> <span>Nonthiya (mj.)</span></div>
+              <div className="member-pill"><User size={13} /> <span>{userName}</span></div>
             </div>
 
             <div className="detail-chip-group">
