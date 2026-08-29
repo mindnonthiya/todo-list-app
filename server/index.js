@@ -11,17 +11,26 @@ app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: Number(process.env.DB_PORT) || 5432,
-  ssl:
-    process.env.DB_SSL === "true"
-      ? { rejectUnauthorized: false }
-      : false,
-});
+const databaseUrl = process.env.DATABASE_URL;
+const databaseUsesSsl =
+  process.env.DB_SSL === "true" ||
+  (Boolean(databaseUrl) && process.env.DB_SSL !== "false");
+
+const pool = new Pool(
+  databaseUrl
+    ? {
+        connectionString: databaseUrl,
+        ssl: databaseUsesSsl ? { rejectUnauthorized: false } : false,
+      }
+    : {
+        user: process.env.DB_USER,
+        host: process.env.DB_HOST,
+        database: process.env.DB_NAME,
+        password: process.env.DB_PASSWORD,
+        port: Number(process.env.DB_PORT) || 5432,
+        ssl: databaseUsesSsl ? { rejectUnauthorized: false } : false,
+      },
+);
 
 const allowedColors = new Set(["green", "blue", "yellow", "orange", "purple", "red"]);
 const allowedPriorities = new Set(["normal", "important", "urgent"]);
@@ -221,6 +230,27 @@ const ensureSchema = async () => {
   await pool.query("UPDATE todos SET priority = 'important' WHERE priority = 'medium'");
   await pool.query("UPDATE todos SET priority = 'urgent'    WHERE priority = 'high'");
 };
+
+let schemaPromise;
+
+const waitForSchema = () => {
+  if (!schemaPromise) {
+    schemaPromise = ensureSchema().catch((error) => {
+      schemaPromise = undefined;
+      throw error;
+    });
+  }
+  return schemaPromise;
+};
+
+app.use(async (_req, res, next) => {
+  try {
+    await waitForSchema();
+    next();
+  } catch (error) {
+    sendServerError(res, error);
+  }
+});
 
 /* ---------- Health ---------- */
 
@@ -605,13 +635,17 @@ app.delete("/api/comments/:id", async (req, res) => {
 
 /* ---------- Start ---------- */
 
-ensureSchema()
-  .then(() => {
-    app.listen(port, () => {
-      console.log(`Server running on port ${port}`);
+if (require.main === module) {
+  waitForSchema()
+    .then(() => {
+      app.listen(port, () => {
+        console.log(`Server running on port ${port}`);
+      });
+    })
+    .catch((error) => {
+      console.error("Unable to prepare database schema", error);
+      process.exit(1);
     });
-  })
-  .catch((error) => {
-    console.error("Unable to prepare database schema", error);
-    process.exit(1);
-  });
+}
+
+module.exports = app;
