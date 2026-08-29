@@ -45,6 +45,12 @@ import {
 import { type TranslationKey } from "../contexts/language-core";
 import { useLanguage } from "../hooks/useLanguage";
 import { useTheme } from "../hooks/useTheme";
+import {
+  compressImageFile,
+  safeLocalStorageSet,
+  idbGet,
+  getLocalStorageUsage,
+} from "../utils/storageHelper";
 import "./TodoList.css";
 
 type Filter = "all" | "active" | "completed";
@@ -414,25 +420,50 @@ export default function TodoList() {
 
   const dateLocale = language === "th" ? "th-TH" : "en-US";
 
-  // Persistent Local Storage Sync
+  // Hydrate full dataset from IndexedDB if localStorage was previously stripped/exceeded
   useEffect(() => {
-    localStorage.setItem("todo_planner_boards", JSON.stringify(boards));
+    idbGet<string>("todo_planner_todos").then((val) => {
+      if (val) {
+        try {
+          const parsed = JSON.parse(val);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setTodos((prev) => {
+              const hasImagesInIDB = parsed.some((t: Todo) => t.imageUrl || (t.images && t.images.length > 0));
+              const currentHasNoImages = prev.every((t) => !t.imageUrl && (!t.images || t.images.length === 0));
+              if (hasImagesInIDB && currentHasNoImages) {
+                return parsed.map((t: Todo) => ({
+                  ...normalizeTodo(t),
+                  title: stripEmojis(t.title),
+                  note: stripEmojis(t.note),
+                }));
+              }
+              return prev;
+            });
+          }
+        } catch {}
+      }
+    });
+  }, []);
+
+  // Safe Persistent Local Storage Sync with IndexedDB Mirroring (Prevents QuotaExceededError)
+  useEffect(() => {
+    safeLocalStorageSet("todo_planner_boards", JSON.stringify(boards));
   }, [boards]);
 
   useEffect(() => {
-    localStorage.setItem("todo_planner_lists", JSON.stringify(lists));
+    safeLocalStorageSet("todo_planner_lists", JSON.stringify(lists));
   }, [lists]);
 
   useEffect(() => {
-    localStorage.setItem("todo_planner_todos", JSON.stringify(todos));
+    safeLocalStorageSet("todo_planner_todos", JSON.stringify(todos));
   }, [todos]);
 
   useEffect(() => {
-    localStorage.setItem("todo_planner_comments", JSON.stringify(comments));
+    safeLocalStorageSet("todo_planner_comments", JSON.stringify(comments));
   }, [comments]);
 
   useEffect(() => {
-    localStorage.setItem("todo_planner_active_board_id", String(activeBoardId));
+    safeLocalStorageSet("todo_planner_active_board_id", String(activeBoardId));
   }, [activeBoardId]);
 
   // Apply accent color to document CSS variables
@@ -441,7 +472,7 @@ export default function TodoList() {
     document.documentElement.style.setProperty("--primary", found.hex);
     document.documentElement.style.setProperty("--primary-strong", found.strong);
     document.documentElement.style.setProperty("--primary-soft", found.soft);
-    localStorage.setItem("todo_accent_color", accentColor);
+    safeLocalStorageSet("todo_accent_color", accentColor);
   }, [accentColor]);
 
   // Click outside menus
@@ -2838,6 +2869,7 @@ function SettingsView({
   const { theme, toggleTheme } = useTheme();
   const { language, setLanguage } = useLanguage();
   const importFileRef = useRef<HTMLInputElement>(null);
+  const storageUsage = useMemo(() => getLocalStorageUsage(), []);
 
   return (
     <section className="settings-page-wrapper" aria-label={t("settings")}>
@@ -3011,6 +3043,18 @@ function SettingsView({
           <h3>{t("dataManagement")}</h3>
         </div>
 
+        {/* Storage Quota & Usage Status */}
+        <div className="settings-row">
+          <div>
+            <strong>พื้นที่จัดเก็บข้อมูล (Storage Quota)</strong>
+            <small>ระบบมีระบบบีบอัดภาพอัตโนมัติและสำรองข้อมูลลง IndexedDB ป้องกันพื้นที่เต็ม</small>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.82rem", fontWeight: 700, color: "var(--muted-strong)", background: "var(--panel)", padding: "5px 12px", borderRadius: "999px", border: "1px solid var(--border)" }}>
+            <span style={{ color: storageUsage.percent > 80 ? "#ef4444" : "var(--primary)" }}>●</span>
+            <span>{storageUsage.usedKB} KB / 5 MB ({storageUsage.percent}%)</span>
+          </div>
+        </div>
+
         <div className="settings-row">
           <div>
             <strong>{t("exportBackup")}</strong>
@@ -3140,7 +3184,7 @@ function TaskDetailModal({
     return allTodos.filter((t) => t.listId === (todo.listId ?? lists[0]?.id));
   }, [allTodos, todo.listId, lists]);
 
-  // Support Ctrl+V anywhere in modal to paste image
+  // Support Ctrl+V anywhere in modal to paste image with auto compression
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
@@ -3150,22 +3194,19 @@ function TaskDetailModal({
         if (items[i].type.startsWith("image/")) {
           const file = items[i].getAsFile();
           if (file) {
-            const reader = new FileReader();
-            reader.onload = (uploadEvent) => {
-              const base64Url = uploadEvent.target?.result as string;
-              if (base64Url) {
+            compressImageFile(file).then((compressedBase64) => {
+              if (compressedBase64) {
                 if (newComment.trim() || document.activeElement?.className?.includes("comment-textarea")) {
-                  setCommentImage(base64Url);
+                  setCommentImage(compressedBase64);
                 } else {
                   setImages((prev) => {
-                    const next = [...prev, base64Url];
+                    const next = [...prev, compressedBase64];
                     onUpdate(todo.id, { images: next });
                     return next;
                   });
                 }
               }
-            };
-            reader.readAsDataURL(file);
+            });
           }
           break;
         }
@@ -3179,30 +3220,24 @@ function TaskDetailModal({
   const handleDataImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (uploadEvent) => {
-        const base64Url = uploadEvent.target?.result as string;
-        if (base64Url) {
+      compressImageFile(file).then((compressedBase64) => {
+        if (compressedBase64) {
           setImages((prev) => {
-            const next = [...prev, base64Url];
+            const next = [...prev, compressedBase64];
             onUpdate(todo.id, { images: next });
             return next;
           });
         }
-      };
-      reader.readAsDataURL(file);
+      });
     }
   };
 
   const handleCommentImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (uploadEvent) => {
-        const base64Url = uploadEvent.target?.result as string;
-        if (base64Url) setCommentImage(base64Url);
-      };
-      reader.readAsDataURL(file);
+      compressImageFile(file).then((compressedBase64) => {
+        if (compressedBase64) setCommentImage(compressedBase64);
+      });
     }
   };
 
@@ -3667,15 +3702,12 @@ function TaskForm({
   const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const base64 = ev.target?.result as string;
-        if (base64) {
-          updateField("images", [...form.images, base64]);
-          if (!form.imageUrl) updateField("imageUrl", base64);
+      compressImageFile(file).then((compressed) => {
+        if (compressed) {
+          updateField("images", [...form.images, compressed]);
+          if (!form.imageUrl) updateField("imageUrl", compressed);
         }
-      };
-      reader.readAsDataURL(file);
+      });
     }
   };
 
@@ -3688,18 +3720,15 @@ function TaskForm({
         if (items[i].type.startsWith("image/")) {
           const file = items[i].getAsFile();
           if (file) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-              const base64 = ev.target?.result as string;
-              if (base64) {
+            compressImageFile(file).then((compressed) => {
+              if (compressed) {
                 setForm((prev) => ({
                   ...prev,
-                  images: [...prev.images, base64],
-                  imageUrl: prev.imageUrl || base64,
+                  images: [...prev.images, compressed],
+                  imageUrl: prev.imageUrl || compressed,
                 }));
               }
-            };
-            reader.readAsDataURL(file);
+            });
           }
           break;
         }
