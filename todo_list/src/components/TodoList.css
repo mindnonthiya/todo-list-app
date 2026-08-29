@@ -1349,7 +1349,9 @@ textarea:focus-visible {
 }
 
 .cal-day-cell {
-  min-height: 80px;
+  height: 84px;
+  max-height: 84px;
+  min-height: 84px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--surface);
@@ -1358,6 +1360,7 @@ textarea:focus-visible {
   flex-direction: column;
   gap: 3px;
   cursor: pointer;
+  overflow: hidden;
   transition: background 150ms ease, border-color 150ms ease;
 }
 
@@ -1399,6 +1402,35 @@ textarea:focus-visible {
   background: var(--primary-soft);
   border-radius: 999px;
   padding: 0 4px;
+}
+
+.cal-task-dots-row {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  margin-top: 3px;
+  flex-wrap: wrap;
+}
+
+.cal-task-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--task-color, var(--primary));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;
+}
+
+.cal-task-dot.is-done {
+  opacity: 0.4;
+}
+
+.cal-task-dot-more {
+  font-size: 0.6rem;
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1;
 }
 
 .cal-cell-tasks-list {
@@ -2810,42 +2842,31 @@ textarea:focus-visible {
   gap: 10px;
 }
 
-.task-toolbar {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.search-field {
-  flex: 1;
-  position: relative;
+.task-toolbar-compact {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 2px 0 6px;
+  border-bottom: 1px solid var(--border);
 }
 
-.search-field svg {
-  position: absolute;
-  left: 8px;
-  color: var(--muted);
+.task-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.search-field input {
-  width: 100%;
-  padding: 6px 8px 6px 28px;
+.task-toolbar-right select {
+  padding: 5px 8px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--surface-raised);
   color: var(--ink);
-  font-size: 0.84rem;
-}
-
-.task-toolbar select {
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--surface-raised);
-  color: var(--ink);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .primary-button {
@@ -3341,7 +3362,7 @@ textarea:focus-visible {
     grid-template-columns: 1fr;
   }
 
-  /* Calendar View on Mobile */
+  /* Calendar View on Mobile (100% Equal Size Grid with Task Dots) */
   .cal-planner-layout {
     grid-template-columns: 1fr;
   }
@@ -3362,14 +3383,42 @@ textarea:focus-visible {
     justify-content: center;
   }
 
-  .cal-day-cell {
-    min-height: 50px;
-    padding: 2px 3px;
+  .cal-month-days-grid {
+    gap: 3px;
   }
 
-  .cal-task-pill {
-    font-size: 0.62rem;
-    padding: 1px 2px;
+  .cal-day-cell {
+    height: 48px;
+    max-height: 48px;
+    min-height: 48px;
+    padding: 3px 2px;
+    align-items: center;
+    justify-content: space-between;
+    border-radius: 7px;
+  }
+
+  .cal-day-num-row {
+    width: 100%;
+    justify-content: center;
+    gap: 2px;
+  }
+
+  .cal-day-number {
+    font-size: 0.76rem;
+  }
+
+  .cal-day-task-count {
+    display: none;
+  }
+
+  .desktop-only-cal-pills {
+    display: none !important;
+  }
+
+  .cal-task-dots-row {
+    display: flex;
+    margin-top: 0;
+    margin-bottom: 2px;
   }
 
   .cal-week-grid {

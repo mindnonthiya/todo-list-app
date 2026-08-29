@@ -897,20 +897,18 @@ export default function TodoList() {
           {/* Tasks List View */}
           {activeView === "tasks" && (
             <section className="tasks-view" aria-label={t("taskList")}>
-              <div className="task-toolbar">
-                <label className="search-field" htmlFor="task-search">
-                  <Search size={18} />
-                  <input id="task-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("searchPlaceholder")} />
-                </label>
-                <select aria-label={t("priority")} value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
-                  <option value="newest">{t("newest")}</option>
-                  <option value="oldest">{t("oldest")}</option>
-                  <option value="completed">{t("completed")}</option>
-                  <option value="priority">{t("priority")}</option>
-                </select>
-                <button type="button" className="primary-button" onClick={() => openCreateDialog()}><Plus size={18} /> {t("addTask")}</button>
+              <div className="task-toolbar-compact">
+                <FilterTabs filter={filter} onChange={setFilter} t={t} />
+                <div className="task-toolbar-right">
+                  <select aria-label={t("priority")} value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
+                    <option value="newest">{t("newest")}</option>
+                    <option value="oldest">{t("oldest")}</option>
+                    <option value="completed">{t("completed")}</option>
+                    <option value="priority">{t("priority")}</option>
+                  </select>
+                  <button type="button" className="primary-button" onClick={() => openCreateDialog()}><Plus size={16} /> <span>{t("addTask")}</span></button>
+                </div>
               </div>
-              <FilterTabs filter={filter} onChange={setFilter} t={t} />
               <div className="task-board">
                 {isLoading ? <SkeletonList /> : visibleTodos.length === 0 ? <EmptyState onAdd={() => openCreateDialog()} t={t} /> : visibleTodos.map((todo) => (
                   <TaskCard
@@ -1603,7 +1601,22 @@ function CalendarPlannerView({
                       {dayTasks.length > 0 && <span className="cal-day-task-count">{dayTasks.length}</span>}
                     </div>
 
-                    <div className="cal-cell-tasks-list">
+                    {/* Task color dots (mobile & compact view, uniform square cells) */}
+                    {dayTasks.length > 0 && (
+                      <div className="cal-task-dots-row">
+                        {dayTasks.slice(0, 4).map((td) => (
+                          <span
+                            key={td.id}
+                            className={`cal-task-dot color-${normalizeColor(td.color)} ${td.completed ? "is-done" : ""}`}
+                            title={td.title}
+                          />
+                        ))}
+                        {dayTasks.length > 4 && <span className="cal-task-dot-more">+{dayTasks.length - 4}</span>}
+                      </div>
+                    )}
+
+                    {/* Desktop wide pills */}
+                    <div className="cal-cell-tasks-list desktop-only-cal-pills">
                       {dayTasks.slice(0, 2).map((td) => (
                         <div
                           key={td.id}
