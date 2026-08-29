@@ -397,6 +397,15 @@ export default function TodoList() {
   const [desktopMenuOpen, setDesktopMenuOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [settingsSaveMsg, setSettingsSaveMsg] = useState("");
+  const [showMobileProgress, setShowMobileProgress] = useState<boolean>(() => {
+    const saved = localStorage.getItem("todo_show_mobile_progress");
+    return saved !== null ? saved === "true" : true;
+  });
+
+  const handleToggleMobileProgress = (enabled: boolean) => {
+    setShowMobileProgress(enabled);
+    localStorage.setItem("todo_show_mobile_progress", String(enabled));
+  };
 
   const inputRef = useRef<HTMLInputElement>(null);
   const boardDropdownRef = useRef<HTMLDivElement>(null);
@@ -868,159 +877,183 @@ export default function TodoList() {
 
         {/* Workspace Main Area */}
         <section className="workspace">
-          {/* Trello-Style Clean Multi-Board Topbar */}
-          <header className="topbar trello-topbar">
-            <div className="topbar-left-group">
-              {/* Board Selector Dropdown */}
-              <div className="topbar-board-switcher" ref={boardDropdownRef}>
-                <button
-                  type="button"
-                  className="board-switcher-btn"
-                  onClick={() => setBoardDropdownOpen((prev) => !prev)}
-                  aria-expanded={boardDropdownOpen}
-                  title="Switch board"
-                >
-                  <LayoutDashboard size={16} className="board-icon" />
-                  <strong className="board-title-truncate">{stripEmojis(currentBoard.title)}</strong>
-                  <ChevronDown size={14} className={`dropdown-arrow ${boardDropdownOpen ? "open" : ""}`} />
-                </button>
+          {/* Pinned Sticky Header Container (Topbar + Board Progress) */}
+          <div className="sticky-header-container">
+            {/* Trello-Style Clean Multi-Board Topbar */}
+            <header className="topbar trello-topbar">
+              <div className="topbar-left-group">
+                {/* Board Selector Dropdown */}
+                <div className="topbar-board-switcher" ref={boardDropdownRef}>
+                  <button
+                    type="button"
+                    className="board-switcher-btn"
+                    onClick={() => setBoardDropdownOpen((prev) => !prev)}
+                    aria-expanded={boardDropdownOpen}
+                    title="Switch board"
+                  >
+                    <LayoutDashboard size={16} className="board-icon" />
+                    <strong className="board-title-truncate">{stripEmojis(currentBoard.title)}</strong>
+                    <ChevronDown size={14} className={`dropdown-arrow ${boardDropdownOpen ? "open" : ""}`} />
+                  </button>
 
-                {boardDropdownOpen && (
-                  <div className="board-dropdown-menu">
-                    <div className="dropdown-section-title">{t("boards")}</div>
-                    <div className="boards-list-scroll">
-                      {boards.map((b) => (
-                        <button
-                          key={b.id}
-                          type="button"
-                          className={b.id === activeBoardId ? "is-active" : ""}
-                          onClick={() => {
-                            setActiveBoardId(b.id);
-                            setBoardDropdownOpen(false);
-                          }}
-                        >
-                          <LayoutDashboard size={14} />
-                          <span>{stripEmojis(b.title)}</span>
-                          {b.id === activeBoardId && <Check size={14} className="check-active" />}
-                        </button>
-                      ))}
+                  {boardDropdownOpen && (
+                    <div className="board-dropdown-menu">
+                      <div className="dropdown-section-title">{t("boards")}</div>
+                      <div className="boards-list-scroll">
+                        {boards.map((b) => (
+                          <button
+                            key={b.id}
+                            type="button"
+                            className={b.id === activeBoardId ? "is-active" : ""}
+                            onClick={() => {
+                              setActiveBoardId(b.id);
+                              setBoardDropdownOpen(false);
+                            }}
+                          >
+                            <LayoutDashboard size={14} />
+                            <span>{stripEmojis(b.title)}</span>
+                            {b.id === activeBoardId && <Check size={14} className="check-active" />}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        className="create-new-board-btn"
+                        onClick={() => {
+                          setDialogMode("createBoard");
+                          setBoardDropdownOpen(false);
+                        }}
+                      >
+                        <Plus size={15} />
+                        <span>{t("createBoard")}</span>
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      className="create-new-board-btn"
-                      onClick={() => {
-                        setDialogMode("createBoard");
-                        setBoardDropdownOpen(false);
-                      }}
-                    >
-                      <Plus size={15} />
-                      <span>{t("createBoard")}</span>
-                    </button>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
 
-              {/* "+ สร้างบอร์ดใหม่" Button */}
-              <button
-                type="button"
-                className="topbar-create-board-btn"
-                onClick={() => setDialogMode("createBoard")}
-                title={t("createBoard")}
-              >
-                <Plus size={15} />
-                <span className="create-board-btn-text">{t("createBoard")}</span>
-              </button>
-            </div>
-
-            {/* Right Action Tools */}
-            <div className="header-actions">
-              {/* Search Field */}
-              <div className="topbar-search-box">
-                <Search size={15} className="search-icon" />
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder={t("searchPlaceholder")}
-                  aria-label={t("searchPlaceholder")}
-                />
-                {search && <button type="button" className="clear-search-btn" onClick={() => setSearch("")}><X size={12} /></button>}
-              </div>
-
-              {/* Desktop Language Switcher */}
-              <div className="desktop-only-btn">
-                <LanguageToggle language={language} onChange={setLanguage} />
-              </div>
-
-              {/* Desktop User Profile Badge */}
-              <button
-                type="button"
-                className="user-profile-badge desktop-only-btn"
-                onClick={() => setActiveView("settings")}
-                title={t("userProfile")}
-                style={{ cursor: "pointer", border: "1px solid var(--border)", background: "transparent" }}
-              >
-                <User size={14} className="user-badge-icon" />
-                <span>{userName}</span>
-              </button>
-
-              {/* Theme Toggle Button (Mobile & Desktop - 1 tap switch directly on topbar) */}
-              <button
-                type="button"
-                className="theme-quick-button"
-                aria-label={t("theme")}
-                onClick={toggleTheme}
-                title={theme === "dark" ? t("light") : t("dark")}
-              >
-                {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
-              </button>
-
-              {/* Desktop Hamburger Menu */}
-              <div className="more-menu-container desktop-only-btn" ref={desktopMenuRef}>
+                {/* "+ สร้างบอร์ดใหม่" Button */}
                 <button
                   type="button"
-                  className="icon-btn topbar-hamburger-btn"
-                  onClick={() => setDesktopMenuOpen((prev) => !prev)}
-                  aria-label="Menu"
-                  title="Menu"
+                  className="topbar-create-board-btn"
+                  onClick={() => setDialogMode("createBoard")}
+                  title={t("createBoard")}
                 >
-                  <Menu size={18} />
+                  <Plus size={15} />
+                  <span className="create-board-btn-text">{t("createBoard")}</span>
                 </button>
-                {desktopMenuOpen && (
-                  <div className="more-dropdown-menu">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDialogMode("guide");
-                        setDesktopMenuOpen(false);
-                      }}
-                    >
-                      <HelpCircle size={15} /> <span>{t("userGuide")}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveView("settings");
-                        setDesktopMenuOpen(false);
-                      }}
-                    >
-                      <Settings size={15} /> <span>{t("settings")}</span>
-                    </button>
-                  </div>
-                )}
               </div>
 
-              {/* Mobile Hamburger Menu (3 lines) */}
-              <button
-                type="button"
-                className="mobile-hamburger-btn"
-                onClick={() => setMobileDrawerOpen(true)}
-                aria-label="Menu"
-              >
-                <Menu size={20} />
-              </button>
-            </div>
-          </header>
+              {/* Right Action Tools */}
+              <div className="header-actions">
+                {/* Search Field */}
+                <div className="topbar-search-box">
+                  <Search size={15} className="search-icon" />
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder={t("searchPlaceholder")}
+                    aria-label={t("searchPlaceholder")}
+                  />
+                  {search && <button type="button" className="clear-search-btn" onClick={() => setSearch("")}><X size={12} /></button>}
+                </div>
+
+                {/* Desktop Language Switcher */}
+                <div className="desktop-only-btn">
+                  <LanguageToggle language={language} onChange={setLanguage} />
+                </div>
+
+                {/* Desktop User Profile Badge */}
+                <button
+                  type="button"
+                  className="user-profile-badge desktop-only-btn"
+                  onClick={() => setActiveView("settings")}
+                  title={t("userProfile")}
+                  style={{ cursor: "pointer", border: "1px solid var(--border)", background: "transparent" }}
+                >
+                  <User size={14} className="user-badge-icon" />
+                  <span>{userName}</span>
+                </button>
+
+                {/* Theme Toggle Button (Mobile & Desktop - 1 tap switch directly on topbar) */}
+                <button
+                  type="button"
+                  className="theme-quick-button"
+                  aria-label={t("theme")}
+                  onClick={toggleTheme}
+                  title={theme === "dark" ? t("light") : t("dark")}
+                >
+                  {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+                </button>
+
+                {/* Desktop Hamburger Menu */}
+                <div className="more-menu-container desktop-only-btn" ref={desktopMenuRef}>
+                  <button
+                    type="button"
+                    className="icon-btn topbar-hamburger-btn"
+                    onClick={() => setDesktopMenuOpen((prev) => !prev)}
+                    aria-label="Menu"
+                    title="Menu"
+                  >
+                    <Menu size={18} />
+                  </button>
+                  {desktopMenuOpen && (
+                    <div className="more-dropdown-menu">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDialogMode("guide");
+                          setDesktopMenuOpen(false);
+                        }}
+                      >
+                        <HelpCircle size={15} /> <span>{t("userGuide")}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveView("settings");
+                          setDesktopMenuOpen(false);
+                        }}
+                      >
+                        <Settings size={15} /> <span>{t("settings")}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Mobile Hamburger Menu (3 lines) */}
+                <button
+                  type="button"
+                  className="mobile-hamburger-btn"
+                  onClick={() => setMobileDrawerOpen(true)}
+                  aria-label="Menu"
+                >
+                  <Menu size={20} />
+                </button>
+              </div>
+            </header>
+
+            {/* Mobile Minimal Board Progress - Numbers Only (Shown on Board View only) */}
+            {showMobileProgress && activeView === "board" && (
+              <div className="mobile-board-progress-wrap" aria-label="Progress">
+                <div className="mobile-board-progress-track">
+                  <div
+                    className="mobile-board-progress-fill"
+                    style={{
+                      width: `${stats.progress}%`,
+                      background: stats.progress === 100
+                        ? "linear-gradient(90deg, #10b981 0%, #059669 100%)"
+                        : "linear-gradient(90deg, var(--primary) 0%, #f43f5e 100%)",
+                    }}
+                  />
+                </div>
+                <div className="mobile-board-progress-info">
+                  <strong>{stats.progress}%</strong>
+                  <span>{stats.completed}/{stats.total}</span>
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Mobile Drawer (Hamburger Menu Sheet with Settings) */}
           {mobileDrawerOpen && (
@@ -1053,6 +1086,15 @@ export default function TodoList() {
                       <span>{t("theme")}</span>
                     </div>
                     <span className="drawer-badge">{theme === "dark" ? t("light") : t("dark")}</span>
+                  </div>
+
+                  {/* Mobile Progress Bar Quick Toggle */}
+                  <div className="drawer-item" onClick={() => handleToggleMobileProgress(!showMobileProgress)}>
+                    <div className="drawer-item-left">
+                      <CheckCircle2 size={17} />
+                      <span>แถบความคืบหน้า</span>
+                    </div>
+                    <span className="drawer-badge">{showMobileProgress ? "เปิด" : "ปิด"}</span>
                   </div>
 
                   {/* Language Switcher Row */}
@@ -1151,11 +1193,9 @@ export default function TodoList() {
                     todo={todo}
                     t={t}
                     dateLocale={dateLocale}
-                    lists={currentBoardLists}
                     onEdit={() => openEditDialog(todo)}
                     onToggle={() => updateTodo(todo.id, { completed: !todo.completed })}
                     onDelete={() => requestDelete(todo)}
-                    onMove={moveTodo}
                     onOpenDetail={openDetailModal}
                   />
                 ))}
@@ -1198,6 +1238,8 @@ export default function TodoList() {
               boards={boards}
               activeBoardId={activeBoardId}
               onSelectDefaultBoard={(id) => setActiveBoardId(id)}
+              showMobileProgress={showMobileProgress}
+              onToggleMobileProgress={handleToggleMobileProgress}
               onClearCompletedRequest={() => setDialogMode("clearCompleted")}
               onResetWorkspaceRequest={() => setDialogMode("resetWorkspace")}
               onExportBackup={handleExportBackup}
@@ -1661,6 +1703,33 @@ function BoardView({
     };
   }, [touchDraggingId, onMoveCard]);
 
+  // Effortless Desktop Mouse Wheel Horizontal Scrolling
+  useEffect(() => {
+    const el = boardScrollRef.current;
+    if (!el) return;
+
+    const onNativeWheel = (e: WheelEvent) => {
+      const target = e.target as HTMLElement;
+      const columnBody = target?.closest?.(".board-column-body");
+      if (columnBody && columnBody.scrollHeight > columnBody.clientHeight) {
+        const atTop = columnBody.scrollTop === 0 && e.deltaY < 0;
+        const atBottom = columnBody.scrollTop + columnBody.clientHeight >= columnBody.scrollHeight - 1 && e.deltaY > 0;
+        if (!atTop && !atBottom) {
+          return;
+        }
+      }
+
+      if (Math.abs(e.deltaY) > 0 || Math.abs(e.deltaX) > 0) {
+        const delta = Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+        el.scrollLeft += delta;
+        e.preventDefault();
+      }
+    };
+
+    el.addEventListener("wheel", onNativeWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onNativeWheel);
+  }, []);
+
   const handleTouchStart = (todoId: number, e: React.TouchEvent) => {
     setTouchDraggingId(todoId);
     setDragId(todoId);
@@ -1835,27 +1904,6 @@ function BoardView({
                           </button>
                         )}
                       </div>
-
-                      <select
-                        className="board-card-move"
-                        value=""
-                        onChange={(e) => {
-                          if (!e.target.value) return;
-                          const [listIdStr, posStr] = e.target.value.split(":");
-                          const targetListId = Number(listIdStr);
-                          const targetPos = posStr === "top" ? 0 : 999;
-                          onMoveCard(todo.id, targetListId, targetPos);
-                        }}
-                        aria-label={t("moveTask")}
-                      >
-                        <option value="" disabled>{t("moveTask")}</option>
-                        {lists.map((l) => (
-                          <optgroup key={l.id} label={localizeListTitle(l.title, t)}>
-                            <option value={`${l.id}:top`}>⬆ {localizeListTitle(l.title, t)} ({t("insertTop")})</option>
-                            <option value={`${l.id}:bottom`}>⬇ {localizeListTitle(l.title, t)} ({t("insertBottom")})</option>
-                          </optgroup>
-                        ))}
-                      </select>
                     </div>
                   </div>
                 </div>
@@ -2045,6 +2093,19 @@ function CalendarPlannerView({
     }
     return monthLabel;
   }, [viewMode, selectedDate, dateLocale, weekDays, monthLabel]);
+
+  // Click outside to close view mode menu dropdown
+  useEffect(() => {
+    if (!viewMenuOpen) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".cal-view-selector-wrap")) {
+        onToggleViewMenu();
+      }
+    };
+    window.addEventListener("click", handleOutsideClick);
+    return () => window.removeEventListener("click", handleOutsideClick);
+  }, [viewMenuOpen, onToggleViewMenu]);
 
   return (
     <section className="calendar-planner-wrapper" aria-label="Calendar Planner">
@@ -2745,6 +2806,8 @@ function SettingsView({
   boards,
   activeBoardId,
   onSelectDefaultBoard,
+  showMobileProgress,
+  onToggleMobileProgress,
   onClearCompletedRequest,
   onResetWorkspaceRequest,
   onExportBackup,
@@ -2763,6 +2826,8 @@ function SettingsView({
   boards: Board[];
   activeBoardId: number | null;
   onSelectDefaultBoard: (id: number) => void;
+  showMobileProgress: boolean;
+  onToggleMobileProgress: (enabled: boolean) => void;
   onClearCompletedRequest: () => void;
   onResetWorkspaceRequest: () => void;
   onExportBackup: () => void;
@@ -2819,7 +2884,7 @@ function SettingsView({
         </div>
       </div>
 
-      {/* 2. Appearance & Accent Color Theme */}
+      {/* 2. Appearance & Interface */}
       <div className="settings-section card">
         <div className="settings-section-title">
           <Palette size={18} />
@@ -2856,6 +2921,22 @@ function SettingsView({
               </button>
             ))}
           </div>
+        </div>
+
+        {/* Show/Hide Mobile Progress Bar Setting */}
+        <div className="settings-row">
+          <div>
+            <strong>แถบความคืบหน้าบนมือถือ</strong>
+            <small>แสดงแถบวัดความคืบหน้ารวมแบบมินิมอลใต้แถบด้านบนในหน้าจอมือถือ</small>
+          </div>
+          <label className="toggle-switch-wrap">
+            <input
+              type="checkbox"
+              checked={showMobileProgress}
+              onChange={(e) => onToggleMobileProgress(e.target.checked)}
+            />
+            <span className="toggle-slider" />
+          </label>
         </div>
       </div>
 
@@ -3757,7 +3838,7 @@ function TaskForm({
 /*  Task Card & Other Shared Subcomponents                       */
 /* ============================================================ */
 
-function TaskCard({ todo, t, dateLocale, lists, onEdit, onToggle, onDelete, onMove, onOpenDetail }: { todo: Todo; t: (key: TranslationKey) => string; dateLocale: string; lists: BoardList[]; onEdit: () => void; onToggle: () => void; onDelete: () => void; onMove: (todoId: number, listId: number, position?: number) => void; onOpenDetail: (todo: Todo) => void }) {
+function TaskCard({ todo, t, dateLocale, onEdit, onToggle, onDelete, onOpenDetail }: { todo: Todo; t: (key: TranslationKey) => string; dateLocale: string; onEdit: () => void; onToggle: () => void; onDelete: () => void; onOpenDetail: (todo: Todo) => void }) {
   const priority = normalizePriority(todo.priority);
   const category = normalizeCategory(todo.category);
   const color = normalizeColor(todo.color);
@@ -3782,29 +3863,6 @@ function TaskCard({ todo, t, dateLocale, lists, onEdit, onToggle, onDelete, onMo
           )}
           {Boolean(todo.commentsCount && todo.commentsCount > 0) && (
             <span className="comment-badge"><MessageSquare size={12} />{todo.commentsCount}</span>
-          )}
-          {lists.length > 0 && (
-            <select
-              className="task-move-select"
-              value=""
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => {
-                if (!e.target.value) return;
-                const [listIdStr, posStr] = e.target.value.split(":");
-                const targetListId = Number(listIdStr);
-                const targetPos = posStr === "top" ? 0 : 999;
-                onMove(todo.id, targetListId, targetPos);
-              }}
-              aria-label={t("moveTask")}
-            >
-              <option value="" disabled>{t("moveTask")}</option>
-              {lists.map((l) => (
-                <optgroup key={l.id} label={localizeListTitle(l.title, t)}>
-                  <option value={`${l.id}:top`}>⬆ {localizeListTitle(l.title, t)} ({t("insertTop")})</option>
-                  <option value={`${l.id}:bottom`}>⬇ {localizeListTitle(l.title, t)} ({t("insertBottom")})</option>
-                </optgroup>
-              ))}
-            </select>
           )}
         </div>
       </div>
