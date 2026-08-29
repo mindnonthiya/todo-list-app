@@ -11,6 +11,9 @@ app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
+app.get("/favicon.ico", (req, res) => res.status(204).end());
+app.get("/", (req, res) => res.json({ status: "ok", message: "Todo List API Server is running" }));
+
 const databaseUrl = process.env.DATABASE_URL;
 const isCloudHost = Boolean(process.env.DB_HOST && (process.env.DB_HOST.includes("supabase.co") || process.env.DB_HOST.includes("neon.tech") || process.env.DB_HOST.includes("railway.app")));
 const databaseUsesSsl =
