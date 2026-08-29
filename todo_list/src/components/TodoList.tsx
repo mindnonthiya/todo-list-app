@@ -322,13 +322,21 @@ export default function TodoList() {
   }, [t]);
 
   useEffect(() => {
-    void fetchBoards();
+    const timeoutId = window.setTimeout(() => {
+      void fetchBoards();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [fetchBoards]);
 
   useEffect(() => {
-    if (activeBoardId) {
+    if (!activeBoardId) return;
+
+    const timeoutId = window.setTimeout(() => {
       void fetchListsAndTodos(activeBoardId);
-    }
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [activeBoardId, fetchListsAndTodos]);
 
   // Click outside menus
@@ -2736,22 +2744,33 @@ function TaskDetailModal({
   // Fetch comments
   useEffect(() => {
     let isMounted = true;
-    setIsCommentsLoading(true);
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      setIsCommentsLoading(true);
 
-    fetch(`${API_BASE}/todos/${todo.id}/comments`)
-      .then((res) => res.json())
-      .then((data: TodoComment[]) => {
-        if (isMounted) {
-          setComments(Array.isArray(data) ? data : []);
-          setIsCommentsLoading(false);
-        }
-      })
-      .catch((err) => {
-        console.error("Failed to load comments", err);
-        if (isMounted) setIsCommentsLoading(false);
-      });
+      fetch(`${API_BASE}/todos/${todo.id}/comments`, { signal: controller.signal })
+        .then((res) => {
+          if (!res.ok) throw new Error("Unable to load comments");
+          return res.json() as Promise<TodoComment[]>;
+        })
+        .then((data) => {
+          if (isMounted) {
+            setComments(Array.isArray(data) ? data : []);
+            setIsCommentsLoading(false);
+          }
+        })
+        .catch((err: unknown) => {
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          console.error("Failed to load comments", err);
+          if (isMounted) setIsCommentsLoading(false);
+        });
+    }, 0);
 
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
   }, [todo.id]);
 
   // Support Ctrl+V anywhere in modal to paste image
