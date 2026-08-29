@@ -1726,7 +1726,16 @@ function CalendarPlannerView({
             <button
               type="button"
               className="cal-month-badge"
-              onClick={() => monthInputRef.current?.showPicker?.() || monthInputRef.current?.click()}
+              onClick={() => {
+                const monthInput = monthInputRef.current;
+                if (!monthInput) return;
+
+                try {
+                  monthInput.showPicker();
+                } catch {
+                  monthInput.click();
+                }
+              }}
               title="Select Month / Year"
             >
               <Calendar size={14} />
