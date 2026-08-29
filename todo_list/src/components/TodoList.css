@@ -4706,3 +4706,241 @@ textarea:focus-visible {
     box-sizing: border-box;
   }
 }
+
+/* ============================================================ */
+/*  Compact & Sleek Voice & Sound Theme Settings UI             */
+/* ============================================================ */
+
+.compact-sound-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  width: 100%;
+}
+
+.sound-themes-compact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 6px;
+  width: 100%;
+}
+
+.sound-pill-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 9px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 150ms ease;
+  user-select: none;
+}
+
+.sound-pill-card:hover {
+  border-color: var(--primary);
+  background: var(--surface-raised);
+}
+
+.sound-pill-card.is-selected {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.sound-pill-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.sound-pill-icon {
+  display: grid;
+  place-items: center;
+  color: var(--muted-strong);
+  flex-shrink: 0;
+}
+
+.sound-pill-card.is-selected .sound-pill-icon {
+  color: var(--primary);
+}
+
+.sound-pill-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sound-pill-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.sound-pill-play-btn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--primary);
+  cursor: pointer;
+  transition: all 120ms ease;
+  padding: 0;
+}
+
+.sound-pill-play-btn:hover {
+  transform: scale(1.15);
+  background: var(--primary);
+  color: #ffffff;
+  border-color: var(--primary);
+}
+
+.sound-pill-check {
+  color: var(--primary);
+}
+
+/* Compact Voice Recorder Bar */
+.compact-voice-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.compact-voice-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  color: var(--muted-strong);
+}
+
+.mic-icon-muted {
+  color: var(--muted);
+}
+
+.compact-voice-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.compact-rec-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 7px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.compact-rec-btn.start-rec {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.compact-rec-btn.start-rec:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.compact-rec-btn.stop-rec {
+  background: #18181b;
+  color: #ffffff;
+  border: 1px solid #ef4444;
+  animation: pulseRecording 1s infinite alternate;
+}
+
+.rec-dot-mini {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ef4444;
+}
+
+.compact-rec-btn.start-rec:hover .rec-dot-mini {
+  background: #ffffff;
+}
+
+.compact-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.compact-action-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.compact-action-btn.save-btn {
+  background: var(--primary);
+  color: #ffffff;
+  border-color: var(--primary);
+}
+
+.compact-action-btn.save-btn:hover {
+  opacity: 0.9;
+}
+
+.compact-action-btn.icon-only-btn {
+  padding: 4px 6px;
+  color: var(--muted);
+}
+
+.compact-action-btn.danger-icon-btn {
+  padding: 4px 6px;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.compact-action-btn.danger-icon-btn:hover {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.compact-alert {
+  padding: 4px 8px;
+  font-size: 0.74rem;
+  border-radius: 6px;
+}
+
+.pulse-red {
+  color: #ef4444;
+  animation: pulseRecording 1s infinite alternate;
+}
+
+@keyframes pulseRecording {
+  from { opacity: 0.5; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1.1); }
+}
