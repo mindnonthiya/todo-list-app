@@ -14,8 +14,14 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.get("/favicon.ico", (req, res) => res.status(204).end());
 app.get("/", (req, res) => res.json({ status: "ok", message: "Todo List API Server is running" }));
 
-const databaseUrl = process.env.DATABASE_URL;
-const isCloudHost = Boolean(process.env.DB_HOST && (process.env.DB_HOST.includes("supabase.co") || process.env.DB_HOST.includes("neon.tech") || process.env.DB_HOST.includes("railway.app")));
+const dbUser = process.env.DB_USER ? process.env.DB_USER.trim() : "postgres";
+const dbHost = process.env.DB_HOST ? process.env.DB_HOST.trim() : "localhost";
+const dbDatabase = process.env.DB_NAME ? process.env.DB_NAME.trim() : "postgres";
+const dbPassword = process.env.DB_PASSWORD ? process.env.DB_PASSWORD.trim() : "";
+const dbPort = Number(process.env.DB_PORT ? process.env.DB_PORT.trim() : 5432) || 5432;
+const databaseUrl = process.env.DATABASE_URL ? process.env.DATABASE_URL.trim() : undefined;
+
+const isCloudHost = Boolean(dbHost && (dbHost.includes("supabase.co") || dbHost.includes("neon.tech") || dbHost.includes("railway.app") || dbHost.includes("render.com") || dbHost.includes("pooler.supabase.com")));
 const databaseUsesSsl =
   process.env.DB_SSL === "true" ||
   isCloudHost ||
@@ -26,14 +32,20 @@ const pool = new Pool(
     ? {
         connectionString: databaseUrl,
         ssl: databaseUsesSsl ? { rejectUnauthorized: false } : false,
+        connectionTimeoutMillis: 10000,
+        idleTimeoutMillis: 30000,
+        max: 10,
       }
     : {
-        user: process.env.DB_USER,
-        host: process.env.DB_HOST,
-        database: process.env.DB_NAME,
-        password: process.env.DB_PASSWORD,
-        port: Number(process.env.DB_PORT) || 5432,
+        user: dbUser,
+        host: dbHost,
+        database: dbDatabase,
+        password: dbPassword,
+        port: dbPort,
         ssl: databaseUsesSsl ? { rejectUnauthorized: false } : false,
+        connectionTimeoutMillis: 10000,
+        idleTimeoutMillis: 30000,
+        max: 10,
       },
 );
 
@@ -42,8 +54,12 @@ const allowedPriorities = new Set(["normal", "important", "urgent"]);
 const allowedCategories = new Set(["work", "study", "personal", "health", "other"]);
 
 const sendServerError = (res, error) => {
-  console.error(error);
-  res.status(500).json({ message: "Internal server error" });
+  console.error("Database / Server Error:", error);
+  res.status(500).json({
+    message: "Internal server error",
+    error: error.message || String(error),
+    detail: error.detail || undefined,
+  });
 };
 
 const normalizeChoice = (value, allowedValues, fallback) =>
@@ -257,10 +273,25 @@ app.use(async (_req, res, next) => {
   }
 });
 
-/* ---------- Health ---------- */
-
-app.get("/", (_req, res) => {
-  res.json({ message: "Todo API is running" });
+/* ---------- Health & Diagnostics ---------- */
+app.get("/api/health", async (_req, res) => {
+  try {
+    const result = await pool.query("SELECT NOW() as current_time, 1 as ok");
+    res.json({
+      status: "ok",
+      database: "connected",
+      time: result.rows[0].current_time,
+      host: dbHost,
+      ssl: databaseUsesSsl,
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: "error",
+      database: "disconnected",
+      message: err.message,
+      host: dbHost,
+    });
+  }
 });
 
 /* ---------- Boards CRUD ---------- */

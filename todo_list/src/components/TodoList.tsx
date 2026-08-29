@@ -282,16 +282,21 @@ export default function TodoList() {
   const fetchBoards = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/boards`);
-      if (!res.ok) throw new Error("Unable to load boards");
+      if (!res.ok) {
+        const errorData = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+        throw new Error(errorData.error || errorData.message || "Unable to load boards");
+      }
       const data = (await res.json()) as Board[];
       setBoards(data);
       if (data.length > 0 && !activeBoardId) {
         setActiveBoardId(data[0].id);
       }
-    } catch (err) {
-      console.error(err);
+    } catch (err: unknown) {
+      console.error("fetchBoards error:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`${t("apiError")} (${msg})`);
     }
-  }, [activeBoardId]);
+  }, [activeBoardId, t]);
 
   /* ---- Fetch Lists & Todos for Active Board ---- */
 
