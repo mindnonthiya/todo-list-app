@@ -297,6 +297,31 @@ function stripEmojis(str?: string | null): string {
     .trim();
 }
 
+function localizeListTitle(title: string, t: (key: TranslationKey) => string): string {
+  const clean = stripEmojis(title).trim().toLowerCase();
+  if (clean === "to do" || clean === "todo" || clean === "สิ่งที่ต้องทำ") return t("columnToDo") || "To Do";
+  if (clean === "in progress" || clean === "กำลังทำ" || clean === "กำลังดำเนินการ") return t("columnInProgress") || "In Progress";
+  if (clean === "done" || clean === "เสร็จสิ้น" || clean === "เสร็จ") return t("columnDone") || "Done";
+  return stripEmojis(title);
+}
+
+function localizeTaskTitle(todo: Todo, t: (key: TranslationKey) => string): string {
+  const clean = stripEmojis(todo.title).trim();
+  if (todo.id === 1 || clean === "ยินดีต้อนรับสู่ Todo Planner" || clean === "Welcome to Todo Planner") return t("defaultTodo1Title");
+  if (todo.id === 2 || clean === "ทดสอบลากและวางการ์ด (Drag & Drop)" || clean === "Try dragging & dropping this card") return t("defaultTodo2Title");
+  if (todo.id === 3 || clean === "งานแรกที่ทำสำเร็จ" || clean === "First completed task") return t("defaultTodo3Title");
+  return clean;
+}
+
+function localizeTaskNote(todo: Todo, t: (key: TranslationKey) => string): string {
+  if (!todo.note) return "";
+  const clean = stripEmojis(todo.note).trim();
+  if (todo.id === 1 || clean.includes("ยินดีต้อนรับ") || clean.includes("Welcome") || clean.includes("คลิกเพื่อดูรายละเอียด")) return t("defaultTodo1Note");
+  if (todo.id === 2 || clean.includes("ลองลาก") || clean.includes("Drag to Done")) return t("defaultTodo2Note");
+  if (todo.id === 3 || clean.includes("ลองคลิก") || clean.includes("completion chime")) return t("defaultTodo3Note");
+  return clean;
+}
+
 /* ============================================================ */
 /*  Main Component (Pure Client-Side Local Storage Architecture) */
 /* ============================================================ */
@@ -822,8 +847,7 @@ export default function TodoList() {
         {/* Sidebar for Desktop */}
         <aside className="sidebar" aria-label="Primary navigation">
           <div className="brand-mark">
-            <AppLogo size={32} />
-            <div><strong>{t("appName")}</strong><span>{t("workspace")}</span></div>
+            <AppLogo size={42} />
           </div>
 
           <Navigation activeView={activeView} labels={viewLabels} onChange={setActiveView} variant="sidebar" />
@@ -923,17 +947,6 @@ export default function TodoList() {
                 {search && <button type="button" className="clear-search-btn" onClick={() => setSearch("")}><X size={12} /></button>}
               </div>
 
-              {/* Desktop Theme Toggle */}
-              <button
-                type="button"
-                className="theme-quick-button desktop-only-btn"
-                aria-label={t("theme")}
-                onClick={toggleTheme}
-                title={theme === "dark" ? t("light") : t("dark")}
-              >
-                {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-              </button>
-
               {/* Desktop Language Switcher */}
               <div className="desktop-only-btn">
                 <LanguageToggle language={language} onChange={setLanguage} />
@@ -949,6 +962,17 @@ export default function TodoList() {
               >
                 <User size={14} className="user-badge-icon" />
                 <span>{userName}</span>
+              </button>
+
+              {/* Theme Toggle Button (Mobile & Desktop - 1 tap switch directly on topbar) */}
+              <button
+                type="button"
+                className="theme-quick-button"
+                aria-label={t("theme")}
+                onClick={toggleTheme}
+                title={theme === "dark" ? t("light") : t("dark")}
+              >
+                {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
               </button>
 
               {/* Desktop Hamburger Menu */}
@@ -986,7 +1010,7 @@ export default function TodoList() {
                 )}
               </div>
 
-              {/* Mobile Hamburger Menu */}
+              {/* Mobile Hamburger Menu (3 lines) */}
               <button
                 type="button"
                 className="mobile-hamburger-btn"
@@ -1373,54 +1397,62 @@ export default function TodoList() {
   );
 }
 
-function AppLogo({ size = 32 }: { size?: number }) {
+function AppLogo({ size = 36, showText = true }: { size?: number; showText?: boolean }) {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 48 48"
-      width={size}
-      height={size}
-      fill="none"
-      className="app-brand-logo-svg"
-      aria-hidden="true"
-    >
-      <defs>
-        <linearGradient id="cleanLogoBg" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#ff6b6b" />
-          <stop offset="60%" stopColor="var(--primary, #ee4040)" />
-          <stop offset="100%" stopColor="var(--primary-strong, #c92a2a)" />
-        </linearGradient>
-        
-        <linearGradient id="cleanTileGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.32" />
-          <stop offset="100%" stopColor="#ffffff" stopOpacity="0.08" />
-        </linearGradient>
+    <div className="app-brand-logo-wrap" style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+      {/* Precision Vector Monogram Checklist Icon */}
+      <svg
+        viewBox="0 0 48 48"
+        width={size}
+        height={size}
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        className="app-brand-icon-svg"
+        aria-hidden="true"
+      >
+        <defs>
+          <linearGradient id="logoTileBg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#22242c" />
+            <stop offset="100%" stopColor="#121318" />
+          </linearGradient>
+          <linearGradient id="logoRedGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#ff4d4d" />
+            <stop offset="100%" stopColor="#ef4444" />
+          </linearGradient>
+        </defs>
 
-        <linearGradient id="cleanCheckStroke" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#ffffff" />
-          <stop offset="100%" stopColor="#fff5f5" />
-        </linearGradient>
+        {/* Squircle Tile Base */}
+        <rect width="48" height="48" rx="12" fill="url(#logoTileBg)" stroke="var(--border-strong, #2f3546)" strokeWidth="1" />
 
-        <filter id="cleanLogoGlow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="var(--primary, #ee4040)" floodOpacity="0.35" />
-        </filter>
-      </defs>
+        {/* 3 Checklist Bullet Dots */}
+        <circle cx="11" cy="14" r="2.5" fill="url(#logoRedGrad)" />
+        <circle cx="11" cy="24" r="2.5" fill="#f4f5f7" />
+        <circle cx="11" cy="34" r="2.5" fill="#f4f5f7" />
 
-      {/* Outer Rounded Squircle Base */}
-      <rect x="3" y="3" width="42" height="42" rx="13" fill="url(#cleanLogoBg)" filter="url(#cleanLogoGlow)" />
-      
-      {/* Subtle Highlight Border */}
-      <rect x="3.5" y="3.5" width="41" height="41" rx="12.5" stroke="#ffffff" strokeWidth="1" strokeOpacity="0.3" fill="none" />
+        {/* P Monogram Bars */}
+        <rect x="17" y="12" width="15" height="3.5" rx="1.75" fill="url(#logoRedGrad)" />
+        <rect x="17" y="22" width="17" height="3.5" rx="1.75" fill="#f4f5f7" />
+        <rect x="17" y="14" width="3.5" height="22" rx="1.75" fill="#f4f5f7" />
 
-      {/* Left Accent Task Tile */}
-      <rect x="11" y="13" width="8" height="22" rx="4" fill="url(#cleanTileGrad)" stroke="#ffffff" strokeWidth="0.8" strokeOpacity="0.2" />
+        {/* Dynamic Red Checkmark Swoosh */}
+        <path
+          d="M20 29 L25 36 L39 17 L36 14 L24 30 L21 26 Z"
+          fill="url(#logoRedGrad)"
+        />
+      </svg>
 
-      {/* Right Floating Task Card */}
-      <rect x="22" y="13" width="15" height="22" rx="4" fill="url(#cleanTileGrad)" stroke="#ffffff" strokeWidth="0.8" strokeOpacity="0.2" />
-
-      {/* Precision Checkmark Crest */}
-      <path d="M14 24.5 L20.5 31 L34 16.5" stroke="url(#cleanCheckStroke)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+      {/* Dynamic HTML Typography */}
+      {showText && (
+        <div className="app-brand-text-block" style={{ display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
+          <span style={{ fontSize: "1.02rem", fontWeight: 800, color: "var(--ink)", letterSpacing: "-0.01em" }}>
+            Todo-List
+          </span>
+          <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--primary)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+            Planner
+          </span>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1529,52 +1561,117 @@ function BoardView({
   const [editListId, setEditListId] = useState<number | null>(null);
   const [editListTitle, setEditListTitle] = useState("");
 
-  // Touch Drag-and-Drop state for Mobile
-  const touchActiveRef = useRef<{ id: number; startX: number; startY: number } | null>(null);
-
-  const handleTouchStart = (todoId: number, e: React.TouchEvent) => {
-    const touch = e.touches[0];
-    touchActiveRef.current = { id: todoId, startX: touch.clientX, startY: touch.clientY };
-    setDragId(todoId);
-  };
-
+  // Continuous Auto-Scroll Engine for Mobile Drag & Drop
+  const autoScrollTimerRef = useRef<number | null>(null);
+  const autoScrollSpeedRef = useRef<number>(0);
   const boardScrollRef = useRef<HTMLElement>(null);
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!touchActiveRef.current) return;
-    const touch = e.touches[0];
-
-    // Auto-scroll board horizontally when dragging near left/right screen edges on mobile
-    if (boardScrollRef.current) {
-      if (touch.clientX > window.innerWidth - 75) {
-        boardScrollRef.current.scrollLeft += 14;
-      } else if (touch.clientX < 75) {
-        boardScrollRef.current.scrollLeft -= 14;
+  const startAutoScroll = () => {
+    if (autoScrollTimerRef.current !== null) return;
+    const step = () => {
+      if (boardScrollRef.current && autoScrollSpeedRef.current !== 0) {
+        boardScrollRef.current.scrollLeft += autoScrollSpeedRef.current;
+        autoScrollTimerRef.current = requestAnimationFrame(step);
+      } else {
+        autoScrollTimerRef.current = null;
       }
-    }
+    };
+    autoScrollTimerRef.current = requestAnimationFrame(step);
+  };
 
-    const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
-    if (!targetEl) return;
-
-    const columnEl = targetEl.closest<HTMLElement>("[data-column-id]");
-    if (columnEl) {
-      const colId = Number(columnEl.getAttribute("data-column-id"));
-      if (colId) setOverListId(colId);
+  const stopAutoScroll = () => {
+    autoScrollSpeedRef.current = 0;
+    if (autoScrollTimerRef.current !== null) {
+      cancelAnimationFrame(autoScrollTimerRef.current);
+      autoScrollTimerRef.current = null;
     }
   };
 
-  const handleTouchEnd = () => {
-    if (touchActiveRef.current && overListId !== null) {
-      onMoveCard(touchActiveRef.current.id, overListId);
+  const [touchDraggingId, setTouchDraggingId] = useState<number | null>(null);
+  const [touchPos, setTouchPos] = useState<{ x: number; y: number } | null>(null);
+  const overListIdRef = useRef<number | null>(null);
+  const [dropEdge, setDropEdge] = useState<"top" | "bottom" | null>(null);
+
+  const draggingTodo = useMemo(() => todos.find((t) => t.id === (touchDraggingId ?? dragId)), [todos, touchDraggingId, dragId]);
+
+  // Global Window Touch Listeners for Seamless Multi-Column Drag & Auto-Scroll
+  useEffect(() => {
+    if (!touchDraggingId) return;
+
+    const onWindowTouchMove = (e: TouchEvent) => {
+      const touch = e.touches[0];
+      if (!touch) return;
+
+      setTouchPos({ x: touch.clientX, y: touch.clientY });
+
+      // 1. Instant & High-Speed Continuous Auto-Scroll near viewport edges
+      const edgeZone = 140;
+      const winWidth = window.innerWidth;
+
+      if (touch.clientX > winWidth - edgeZone) {
+        const ratio = (touch.clientX - (winWidth - edgeZone)) / edgeZone;
+        autoScrollSpeedRef.current = Math.round(20 + Math.pow(ratio, 1.5) * 42);
+        startAutoScroll();
+      } else if (touch.clientX < edgeZone) {
+        const ratio = (edgeZone - touch.clientX) / edgeZone;
+        autoScrollSpeedRef.current = -Math.round(20 + Math.pow(ratio, 1.5) * 42);
+        startAutoScroll();
+      } else {
+        stopAutoScroll();
+      }
+
+      // 2. Identify target column and card under the touch point
+      const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
+      if (targetEl) {
+        const columnEl = targetEl.closest<HTMLElement>("[data-column-id]");
+        if (columnEl) {
+          const colId = Number(columnEl.getAttribute("data-column-id"));
+          if (colId) {
+            overListIdRef.current = colId;
+            setOverListId(colId);
+          }
+        }
+      }
+    };
+
+    const onWindowTouchEnd = () => {
+      stopAutoScroll();
+      const targetListId = overListIdRef.current;
+      if (targetListId !== null && touchDraggingId !== null) {
+        onMoveCard(touchDraggingId, targetListId);
+      }
+      overListIdRef.current = null;
+      setOverListId(null);
+      setTouchDraggingId(null);
+      setTouchPos(null);
+      setDragId(null);
+      setOverCardId(null);
+      setDropEdge(null);
+    };
+
+    window.addEventListener("touchmove", onWindowTouchMove, { passive: true });
+    window.addEventListener("touchend", onWindowTouchEnd);
+    window.addEventListener("touchcancel", onWindowTouchEnd);
+
+    return () => {
+      stopAutoScroll();
+      window.removeEventListener("touchmove", onWindowTouchMove);
+      window.removeEventListener("touchend", onWindowTouchEnd);
+      window.removeEventListener("touchcancel", onWindowTouchEnd);
+    };
+  }, [touchDraggingId, onMoveCard]);
+
+  const handleTouchStart = (todoId: number, e: React.TouchEvent) => {
+    setTouchDraggingId(todoId);
+    setDragId(todoId);
+    const touch = e.touches[0];
+    if (touch) {
+      setTouchPos({ x: touch.clientX, y: touch.clientY });
     }
-    touchActiveRef.current = null;
-    setDragId(null);
-    setOverListId(null);
-    setOverCardId(null);
   };
 
   return (
-    <section ref={boardScrollRef} className="board-view" aria-label={t("board")}>
+    <section ref={boardScrollRef} className={`board-view ${touchDraggingId ? "is-dragging-active" : ""}`} aria-label={t("board")}>
       {lists.map((list, listIndex) => {
         const cards = todos
           .filter((td) => td.listId === list.id)
@@ -1596,6 +1693,7 @@ function BoardView({
                 setDragId(null);
                 setOverListId(null);
                 setOverCardId(null);
+                setDropEdge(null);
               }
             }}
           >
@@ -1609,7 +1707,7 @@ function BoardView({
               ) : (
                 <>
                   <div className="board-column-title">
-                    <h3>{stripEmojis(list.title)}</h3>
+                    <h3>{localizeListTitle(list.title, t)}</h3>
                     <span className="board-column-count">{cards.length}</span>
                   </div>
                   <div className="board-column-actions">
@@ -1624,7 +1722,7 @@ function BoardView({
               {cards.map((todo, cardIndex) => (
                 <div
                   key={todo.id}
-                  className={`board-card color-${normalizeColor(todo.color)} ${todo.completed ? "is-completed" : ""} ${dragId === todo.id ? "is-dragging" : ""} ${overCardId === todo.id && dragId !== todo.id ? "card-drag-target" : ""}`}
+                  className={`board-card color-${normalizeColor(todo.color)} ${todo.completed ? "is-completed" : ""} ${dragId === todo.id ? "is-dragging" : ""} ${overCardId === todo.id && dragId !== todo.id ? (dropEdge === "top" ? "drop-top" : "drop-bottom") : ""}`}
                   draggable
                   onDragStart={(e) => {
                     setDragId(todo.id);
@@ -1634,29 +1732,39 @@ function BoardView({
                     setDragId(null);
                     setOverListId(null);
                     setOverCardId(null);
+                    setDropEdge(null);
                   }}
                   onDragOver={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    if (overCardId !== todo.id) setOverCardId(todo.id);
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const isTop = (e.clientY - rect.top) < (rect.height / 2);
+                    const edge = isTop ? "top" : "bottom";
+                    if (overCardId !== todo.id || dropEdge !== edge) {
+                      setOverCardId(todo.id);
+                      setDropEdge(edge);
+                    }
                   }}
                   onDragLeave={(e) => {
                     e.stopPropagation();
-                    if (overCardId === todo.id) setOverCardId(null);
+                    if (overCardId === todo.id) {
+                      setOverCardId(null);
+                      setDropEdge(null);
+                    }
                   }}
                   onDrop={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     if (dragId !== null && dragId !== todo.id) {
-                      onMoveCard(dragId, list.id, cardIndex);
+                      const insertIndex = dropEdge === "top" ? cardIndex : cardIndex + 1;
+                      onMoveCard(dragId, list.id, insertIndex);
                       setDragId(null);
                       setOverListId(null);
                       setOverCardId(null);
+                      setDropEdge(null);
                     }
                   }}
                   onTouchStart={(e) => handleTouchStart(todo.id, e)}
-                  onTouchMove={handleTouchMove}
-                  onTouchEnd={handleTouchEnd}
                   onClick={() => onOpenDetail(todo)}
                 >
                   {/* Compact Card Cover Thumbnail */}
@@ -1679,11 +1787,11 @@ function BoardView({
                       >
                         {todo.completed ? <CheckCircle2 size={15} /> : <Circle size={15} />}
                       </button>
-                      <h4 className={todo.completed ? "is-completed-text" : ""}>{stripEmojis(todo.title)}</h4>
+                      <h4 className={todo.completed ? "is-completed-text" : ""}>{localizeTaskTitle(todo, t)}</h4>
                       <GripVertical size={13} className="drag-handle" aria-hidden="true" />
                     </div>
 
-                    {todo.note && <p className="board-card-note">{stripEmojis(todo.note)}</p>}
+                    {todo.note && <p className="board-card-note">{localizeTaskNote(todo, t)}</p>}
 
                     <div className="board-card-meta">
                       <span className={`priority-badge ${normalizePriority(todo.priority)}`}>
@@ -1730,11 +1838,23 @@ function BoardView({
 
                       <select
                         className="board-card-move"
-                        value={todo.listId ?? ""}
-                        onChange={(e) => onMoveCard(todo.id, Number(e.target.value))}
+                        value=""
+                        onChange={(e) => {
+                          if (!e.target.value) return;
+                          const [listIdStr, posStr] = e.target.value.split(":");
+                          const targetListId = Number(listIdStr);
+                          const targetPos = posStr === "top" ? 0 : 999;
+                          onMoveCard(todo.id, targetListId, targetPos);
+                        }}
                         aria-label={t("moveTask")}
                       >
-                        {lists.map((l) => <option key={l.id} value={l.id}>{l.title}</option>)}
+                        <option value="" disabled>{t("moveTask")}</option>
+                        {lists.map((l) => (
+                          <optgroup key={l.id} label={localizeListTitle(l.title, t)}>
+                            <option value={`${l.id}:top`}>⬆ {localizeListTitle(l.title, t)} ({t("insertTop")})</option>
+                            <option value={`${l.id}:bottom`}>⬇ {localizeListTitle(l.title, t)} ({t("insertBottom")})</option>
+                          </optgroup>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -1770,6 +1890,41 @@ function BoardView({
         <button type="button" className="board-add-list" onClick={() => setNewListMode(true)}>
           <Plus size={15} /> <span>{t("addList")}</span>
         </button>
+      )}
+      {/* Floating Drag Preview Card Ghost following Finger/Cursor */}
+      {draggingTodo && touchPos && (
+        <div
+          className="floating-drag-card-ghost"
+          style={{
+            position: "fixed",
+            left: Math.max(10, Math.min(window.innerWidth - 240, touchPos.x - 110)),
+            top: Math.max(10, touchPos.y - 48),
+            width: "220px",
+            pointerEvents: "none",
+            zIndex: 99999,
+            transform: "rotate(3.5deg) scale(1.05)",
+            background: "var(--surface-raised)",
+            border: "2px solid var(--primary)",
+            borderRadius: "12px",
+            boxShadow: "0 18px 40px rgba(0, 0, 0, 0.75), 0 0 20px rgba(239, 68, 68, 0.45)",
+            padding: "9px 12px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "4px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--primary)", textTransform: "uppercase" }}>
+              {t(normalizeCategory(draggingTodo.category))}
+            </span>
+            <span style={{ fontSize: "0.65rem", padding: "1px 6px", borderRadius: 999, background: "var(--primary-soft)", color: "var(--primary)", fontWeight: 700 }}>
+              ✋ {t("moveTask")}
+            </span>
+          </div>
+          <strong style={{ fontSize: "0.86rem", color: "var(--ink)", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {localizeTaskTitle(draggingTodo, t)}
+          </strong>
+        </div>
       )}
     </section>
   );
@@ -2030,10 +2185,10 @@ function CalendarPlannerView({
                             e.stopPropagation();
                             onOpenDetail(td);
                           }}
-                          title={td.title}
+                          title={localizeTaskTitle(td, t)}
                         >
                           {td.completed ? <CheckCircle2 size={10} className="chip-icon check" /> : <Circle size={10} className="chip-icon" />}
-                          <span className="chip-title">{td.title}</span>
+                          <span className="chip-title">{localizeTaskTitle(td, t)}</span>
                         </div>
                       ))}
                       {dayTasks.length > 2 && (
@@ -2086,9 +2241,9 @@ function CalendarPlannerView({
                         >
                           {td.completed ? <CheckCircle2 size={15} /> : <Circle size={15} />}
                         </button>
-                        <strong className={td.completed ? "is-completed-text" : ""}>{td.title}</strong>
+                        <strong className={td.completed ? "is-completed-text" : ""}>{localizeTaskTitle(td, t)}</strong>
                       </div>
-                      {td.note && <p className="cal-card-note">{td.note}</p>}
+                      {td.note && <p className="cal-card-note">{localizeTaskNote(td, t)}</p>}
                       <div className="cal-card-meta">
                         <span className={`priority-badge ${normalizePriority(td.priority)}`}><Flag size={10} /> {t(normalizePriority(td.priority))}</span>
                         {td.dueTime && <span><Clock size={10} /> {td.dueTime}</span>}
@@ -2134,7 +2289,7 @@ function CalendarPlannerView({
                           >
                             {td.completed ? <CheckCircle2 size={13} /> : <Circle size={13} />}
                           </button>
-                          <span className="cal-week-task-title">{td.title}</span>
+                          <span className="cal-week-task-title">{localizeTaskTitle(td, t)}</span>
                         </div>
                         {td.dueTime && <small className="cal-week-time"><Clock size={10} /> {td.dueTime}</small>}
                       </div>
@@ -2195,8 +2350,8 @@ function CalendarPlannerView({
                   </button>
 
                   <div className="cal-day-card-body">
-                    <h4>{td.title}</h4>
-                    {td.note && <p>{td.note}</p>}
+                    <h4>{localizeTaskTitle(td, t)}</h4>
+                    {td.note && <p>{localizeTaskNote(td, t)}</p>}
                     <div className="cal-card-meta">
                       <span className={`priority-badge ${normalizePriority(td.priority)}`}><Flag size={11} /> {t(normalizePriority(td.priority))}</span>
                       <span><Folder size={11} /> {t(normalizeCategory(td.category))}</span>
@@ -3614,8 +3769,8 @@ function TaskCard({ todo, t, dateLocale, lists, onEdit, onToggle, onDelete, onMo
         {todo.completed ? <CheckCircle2 size={18} /> : <Circle size={18} />}
       </button>
       <div className="task-content">
-        <h3>{todo.title}</h3>
-        {todo.note && <p>{todo.note}</p>}
+        <h3>{localizeTaskTitle(todo, t)}</h3>
+        {todo.note && <p>{localizeTaskNote(todo, t)}</p>}
         <div className="task-meta">
           <span><Folder size={12} />{t(category)}</span>
           <span className={`priority-badge ${priority}`}><Flag size={12} />{t(priority)}</span>
@@ -3631,12 +3786,24 @@ function TaskCard({ todo, t, dateLocale, lists, onEdit, onToggle, onDelete, onMo
           {lists.length > 0 && (
             <select
               className="task-move-select"
-              value={todo.listId ?? ""}
+              value=""
               onClick={(e) => e.stopPropagation()}
-              onChange={(e) => onMove(todo.id, Number(e.target.value))}
+              onChange={(e) => {
+                if (!e.target.value) return;
+                const [listIdStr, posStr] = e.target.value.split(":");
+                const targetListId = Number(listIdStr);
+                const targetPos = posStr === "top" ? 0 : 999;
+                onMove(todo.id, targetListId, targetPos);
+              }}
               aria-label={t("moveTask")}
             >
-              {lists.map((l) => <option key={l.id} value={l.id}>{l.title}</option>)}
+              <option value="" disabled>{t("moveTask")}</option>
+              {lists.map((l) => (
+                <optgroup key={l.id} label={localizeListTitle(l.title, t)}>
+                  <option value={`${l.id}:top`}>⬆ {localizeListTitle(l.title, t)} ({t("insertTop")})</option>
+                  <option value={`${l.id}:bottom`}>⬇ {localizeListTitle(l.title, t)} ({t("insertBottom")})</option>
+                </optgroup>
+              ))}
             </select>
           )}
         </div>

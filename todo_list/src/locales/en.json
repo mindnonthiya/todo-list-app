@@ -186,5 +186,16 @@
   "guideAnalyticsDesc": "Track achievements with Tier Badges, 30-day consistency heatmap, and weekly productive days.",
   "guideSettingsTitle": "4. Accent Colors, Sound FX & Backup",
   "guideSettingsDesc": "Personalize with 5 accent colors, task completion chime sound, and easy JSON export/import.",
-  "gotIt": "Got it, let's start"
+  "gotIt": "Got it, let's start",
+  "columnToDo": "To Do",
+  "columnInProgress": "In Progress",
+  "columnDone": "Done",
+  "defaultTodo1Title": "Welcome to Todo Planner",
+  "defaultTodo1Note": "Click to view details, attach images, or write comments",
+  "defaultTodo2Title": "Try dragging & dropping this card",
+  "defaultTodo2Note": "Drag to Done column or tap arrow buttons to move columns",
+  "defaultTodo3Title": "First completed task",
+  "defaultTodo3Note": "Click the checkmark to hear the completion chime sound",
+  "insertTop": "Top",
+  "insertBottom": "Bottom"
 }
