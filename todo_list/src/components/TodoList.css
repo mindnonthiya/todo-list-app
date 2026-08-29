@@ -249,17 +249,26 @@ textarea:focus-visible {
   position: relative;
   z-index: 20;
   min-height: 84px;
-  padding: 18px 24px;
+  padding: 20px 28px;
   border-radius: 28px;
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 20px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
 }
 
-.topbar p {
+.topbar-left {
+  min-width: 0;
+}
+
+.topbar-date {
   margin: 0 0 4px;
   color: var(--muted);
   font-weight: 650;
+  font-size: 0.88rem;
+  letter-spacing: 0.02em;
 }
 
 .topbar h1 {
@@ -326,17 +335,20 @@ textarea:focus-visible {
   inset: 0 0 auto auto;
   z-index: 1000;
   pointer-events: none;
+  width: 0;
+  height: 0;
 }
 
 .profile-menu {
   position: absolute;
-  top: 74px;
-  right: 24px;
+  top: 64px;
+  right: 0;
   z-index: 1001;
   min-width: 240px;
   padding: 8px;
   border-radius: 18px;
   background: var(--surface-raised);
+  border: 1px solid var(--border);
   box-shadow: var(--shadow);
   pointer-events: auto;
 }
@@ -710,11 +722,12 @@ textarea {
 .task-board {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 16px;
 }
 
 .task-card {
   position: relative;
+  display: flex;
   align-items: flex-start;
   gap: 14px;
   border: 1px solid var(--border);
@@ -2278,4 +2291,405 @@ textarea {
 .bottom-nav .add-nav-item svg {
   width: 20px;
   height: 20px;
+}
+
+/* ============================================================ */
+/*  Priority badges                                              */
+/* ============================================================ */
+
+.task-meta .normal { color: var(--primary); }
+.task-meta .important { color: #b8860b; }
+.task-meta .urgent { color: var(--danger); }
+
+.board-card-meta .normal { color: var(--primary); }
+.board-card-meta .important { color: #b8860b; }
+.board-card-meta .urgent { color: var(--danger); }
+
+/* Move-to select inside task cards */
+.task-move-select,
+.board-card-move {
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--muted-strong);
+  cursor: pointer;
+}
+
+/* ============================================================ */
+/*  Board View — Kanban                                          */
+/* ============================================================ */
+
+.board-view {
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  min-height: calc(100vh - 220px);
+  align-items: flex-start;
+  scrollbar-width: thin;
+}
+
+.board-column {
+  flex: 0 0 300px;
+  min-width: 300px;
+  max-height: calc(100vh - 220px);
+  border-radius: var(--radius);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  transition: border-color 200ms ease, background 200ms ease;
+}
+
+.board-column.drag-over {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary-soft) 50%, var(--panel));
+}
+
+.board-column-header {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.board-column-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.board-column-title h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.board-column-count {
+  background: var(--border-strong);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--muted-strong);
+  flex-shrink: 0;
+}
+
+.board-column-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.icon-btn {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: transparent;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.icon-btn:hover {
+  background: var(--border);
+  color: var(--ink);
+}
+
+.board-edit-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.board-edit-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--primary);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.board-column-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  scrollbar-width: thin;
+}
+
+.board-card {
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  cursor: grab;
+  transition: transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
+}
+
+.board-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-small);
+}
+
+.board-card.is-dragging {
+  opacity: 0.4;
+  transform: rotate(2deg) scale(0.96);
+}
+
+.board-card.is-completed {
+  opacity: 0.6;
+}
+
+.board-card.is-completed h4 {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.board-card-color {
+  width: 100%;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--task-color, var(--primary));
+  margin-bottom: 8px;
+}
+
+.board-card-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.board-card-top .complete-button {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--primary);
+}
+
+.board-card-top h4 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.35;
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.board-card-top .is-completed-text {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.drag-handle {
+  flex-shrink: 0;
+  color: var(--border-strong);
+  cursor: grab;
+}
+
+.board-card-note {
+  margin: 6px 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.board-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.board-card-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--panel);
+}
+
+.board-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.board-card-actions .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+
+.board-card-actions .board-card-move {
+  margin-left: auto;
+}
+
+.board-add-card {
+  width: 100%;
+  padding: 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.board-add-card:hover {
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+.board-add-list {
+  flex: 0 0 300px;
+  min-width: 300px;
+  min-height: 120px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 200ms ease, color 150ms ease;
+}
+
+.board-add-list:hover {
+  background: var(--panel);
+  border-color: var(--primary);
+  color: var(--ink);
+}
+
+.board-new-list {
+  flex: 0 0 300px;
+  min-width: 300px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+
+.board-new-list input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  color: var(--ink);
+  font-size: 0.95rem;
+  margin-bottom: 10px;
+}
+
+.board-new-list-btns {
+  display: flex;
+  gap: 8px;
+}
+
+/* ============================================================ */
+/*  Mobile Board                                                 */
+/* ============================================================ */
+
+@media (max-width: 767px) {
+  .topbar {
+    padding: 14px 18px;
+    border-radius: 20px;
+    gap: 12px;
+    min-height: auto;
+  }
+
+  .topbar h1 {
+    font-size: 1.4rem;
+  }
+
+  .topbar-date {
+    font-size: 0.78rem;
+  }
+
+  .popover-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    width: auto;
+    height: auto;
+    pointer-events: auto;
+    background: rgba(18, 20, 16, .42);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+
+  .profile-menu {
+    position: static;
+    width: 100%;
+    max-width: 420px;
+    border-radius: 22px 22px 0 0;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .board-view {
+    min-height: auto;
+    padding-bottom: 8px;
+    gap: 12px;
+  }
+
+  .board-column {
+    flex: 0 0 270px;
+    min-width: 270px;
+    max-height: calc(100vh - 230px);
+  }
+
+  .board-add-list {
+    flex: 0 0 270px;
+    min-width: 270px;
+    min-height: 100px;
+  }
+
+  .board-new-list {
+    flex: 0 0 270px;
+    min-width: 270px;
+  }
+
+  .board-card {
+    padding: 10px 12px;
+  }
+
+  .task-board {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
 }

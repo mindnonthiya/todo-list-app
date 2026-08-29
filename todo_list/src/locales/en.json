@@ -1,6 +1,7 @@
 {
   "appName": "Todo Planner",
   "workspace": "Workspace",
+  "board": "Board",
   "calendar": "Calendar",
   "tasks": "Tasks",
   "addTask": "Add Task",
@@ -63,7 +64,7 @@
   "completedVsPending": "Completed vs Pending",
   "weeklyChart": "Weekly chart",
   "moodTracker": "Mood tracker",
-  "workingState": "Today’s working state",
+  "workingState": "Today's working state",
   "currentStreak": "Current Streak",
   "longestStreak": "Longest Streak",
   "averageCompletion": "Average Completion",
@@ -74,9 +75,9 @@
   "firstTask": "First Task",
   "sevenDayStreak": "7 Day Streak",
   "hundredTasksCompleted": "100 Tasks Completed",
-  "low": "Low",
-  "medium": "Medium",
-  "high": "High",
+  "normal": "Normal",
+  "important": "Important",
+  "urgent": "Urgent",
   "work": "Work",
   "study": "Study",
   "personal": "Personal",
@@ -100,5 +101,12 @@
   "nextMonth": "Next month",
   "close": "Close",
   "note": "Note",
-  "notePlaceholder": "Add supporting details, links, or acceptance criteria."
+  "notePlaceholder": "Add supporting details, links, or acceptance criteria.",
+  "addList": "Add List",
+  "editList": "Edit List",
+  "deleteList": "Delete List?",
+  "deleteListWarning": "All tasks in this list will be moved to the first list.",
+  "listName": "List name",
+  "moveTask": "Move to",
+  "list": "List"
 }

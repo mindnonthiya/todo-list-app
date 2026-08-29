@@ -1,6 +1,7 @@
 {
   "appName": "Todo Planner",
   "workspace": "พื้นที่ทำงาน",
+  "board": "บอร์ด",
   "calendar": "ปฏิทิน",
   "tasks": "งาน",
   "addTask": "เพิ่มงาน",
@@ -74,9 +75,9 @@
   "firstTask": "งานแรก",
   "sevenDayStreak": "สตรีค 7 วัน",
   "hundredTasksCompleted": "ทำครบ 100 งาน",
-  "low": "ต่ำ",
-  "medium": "กลาง",
-  "high": "สูง",
+  "normal": "ปกติ",
+  "important": "สำคัญ",
+  "urgent": "เร่งด่วน",
   "work": "งาน",
   "study": "เรียน",
   "personal": "ส่วนตัว",
@@ -100,5 +101,12 @@
   "nextMonth": "เดือนถัดไป",
   "close": "ปิด",
   "note": "บันทึก",
-  "notePlaceholder": "เพิ่มรายละเอียด ลิงก์ หรือเกณฑ์ความสำเร็จ"
+  "notePlaceholder": "เพิ่มรายละเอียด ลิงก์ หรือเกณฑ์ความสำเร็จ",
+  "addList": "เพิ่มรายการ",
+  "editList": "แก้ไขรายการ",
+  "deleteList": "ลบรายการนี้?",
+  "deleteListWarning": "งานทั้งหมดในรายการนี้จะถูกย้ายไปรายการแรก",
+  "listName": "ชื่อรายการ",
+  "moveTask": "ย้ายไป",
+  "list": "รายการ"
 }
