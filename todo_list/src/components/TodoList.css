@@ -1434,12 +1434,26 @@ textarea {
     scroll-snap-align: start;
   }
 
-  .analytics-stats,
   .profile-stats,
-  .badge-list,
-  .mood-grid,
+  .badge-list {
+    grid-template-columns: 1fr;
+  }
+
   .form-grid.two {
     grid-template-columns: 1fr;
+  }
+
+  .form-grid.two:has(input[type="date"]),
+  .form-grid.two:has(input[type="time"]) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mood-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .analytics-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .mood-card,
@@ -1492,27 +1506,29 @@ textarea {
     left: 50%;
     bottom: 14px;
     z-index: 100;
-    width: min(calc(100% - 24px), 720px);
+    width: min(calc(100% - 24px), 420px);
     transform: translateX(-50%);
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     gap: 4px;
-    border-radius: 24px;
-    padding: 8px;
+    border-radius: 22px;
+    padding: 6px 8px;
   }
 
   .bottom-nav button {
     justify-content: center;
     flex-direction: column;
     gap: 3px;
-    min-height: 58px;
-    padding: 7px 4px;
-    font-size: .72rem;
+    min-height: 54px;
+    padding: 6px 4px;
+    font-size: .68rem;
+    font-weight: 500;
   }
 
   .bottom-nav .add-nav-item {
     color: var(--surface);
     background: var(--primary-strong);
+    border-radius: 16px;
   }
 
   .bottom-nav .add-nav-item.is-active {
@@ -1715,7 +1731,8 @@ textarea {
 
 @media (max-width: 767px) {
   .planner-app {
-    padding: 8px 8px calc(72px + env(safe-area-inset-bottom, 0px));
+    padding: 8px 8px calc(82px + env(safe-area-inset-bottom, 0px));
+    overflow-x: hidden;
   }
 
   .workspace {
@@ -1849,11 +1866,19 @@ textarea {
 
   .compact-stats {
     gap: 8px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .compact-stats::-webkit-scrollbar {
+    display: none;
   }
 
   .compact-stats .stat-card {
-    flex-basis: 112px;
+    flex-basis: 120px;
     padding: 12px;
+    aspect-ratio: auto;
+    min-height: 100px;
   }
 
   .stat-card div {
@@ -1891,6 +1916,11 @@ textarea {
   .preview-row {
     padding: 10px;
     border-radius: 14px;
+    transition: transform 150ms ease;
+  }
+
+  .preview-row:active {
+    transform: scale(0.98);
   }
 
   .task-toolbar {
@@ -1910,11 +1940,19 @@ textarea {
 
   .filter-tabs {
     gap: 6px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .filter-tabs::-webkit-scrollbar {
+    display: none;
   }
 
   .filter-tabs button {
-    padding: 8px 12px;
-    font-size: .82rem;
+    padding: 8px 14px;
+    font-size: .84rem;
+    flex-shrink: 0;
+    white-space: nowrap;
   }
 
   .task-board {
@@ -1925,6 +1963,11 @@ textarea {
     gap: 10px;
     padding: 12px;
     border-radius: 18px;
+    transition: transform 150ms ease;
+  }
+
+  .task-card:active {
+    transform: scale(0.98);
   }
 
   .task-card::before {
@@ -2018,14 +2061,18 @@ textarea {
   }
 
   .color-picker>div {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
     gap: 6px;
   }
 
   .color-swatch {
-    min-height: 36px;
-    padding: 0 10px;
-    gap: 7px;
-    font-size: .82rem;
+    min-height: 34px;
+    padding: 0 8px;
+    gap: 6px;
+    font-size: .78rem;
+    justify-content: center;
+    border-radius: 12px;
   }
 
   .color-swatch span {
@@ -2057,36 +2104,51 @@ textarea {
   .analytics-hero {
     min-height: 0;
     padding: 16px;
+    gap: 16px;
+  }
+
+  .analytics-hero h2 {
+    font-size: 1.15rem;
   }
 
   .progress-ring,
   .donut-chart {
-    width: 112px;
+    width: 100px;
+    flex-shrink: 0;
   }
 
   .progress-ring span {
-    width: 82px;
-    font-size: 1.05rem;
+    width: 74px;
+    font-size: 1rem;
   }
 
   .donut-chart::after {
-    width: 68px;
+    width: 60px;
+  }
+
+  .weekly-card {
+    padding: 14px;
   }
 
   .weekly-chart {
-    height: 150px;
-    gap: 8px;
+    height: 140px;
+    gap: 6px;
+  }
+
+  .weekly-chart div {
+    font-size: .72rem;
   }
 
   .mood-grid {
+    grid-template-columns: repeat(2, 1fr);
     gap: 8px;
     margin-top: 10px;
   }
 
   .mood-grid button {
-    min-height: 40px;
+    min-height: 42px;
     border-radius: 14px;
-    font-size: .82rem;
+    font-size: .84rem;
   }
 
   .profile-hero {
@@ -2138,13 +2200,21 @@ textarea {
     gap: 10px;
   }
 
+  .profile-stats .stat-card:last-child {
+    grid-column: 1 / -1;
+  }
+
   .profile-stats .stat-card {
-    min-height: 92px;
+    min-height: 88px;
     padding: 12px;
   }
 
+  .analytics-stats .stat-card:last-child {
+    grid-column: 1 / -1;
+  }
+
   .analytics-stats .stat-card {
-    min-height: 88px;
+    min-height: 84px;
     padding: 12px;
   }
 
@@ -2175,27 +2245,37 @@ textarea {
   }
 
   .bottom-nav {
-    bottom: max(8px, env(safe-area-inset-bottom, 0px));
-    width: min(calc(100% - 20px), 430px);
-    border-radius: 20px;
-    padding: 6px;
+    bottom: max(10px, env(safe-area-inset-bottom, 0px));
+    width: min(calc(100% - 24px), 420px);
+    border-radius: 22px;
+    padding: 6px 8px;
   }
 }
 
 .bottom-nav button {
-  min-height: 48px;
-  gap: 2px;
-  padding: 5px 2px;
+  min-height: 52px;
+  gap: 3px;
+  padding: 6px 4px;
   border-radius: 14px;
-  font-size: .64rem;
+  font-size: .68rem;
+  font-weight: 500;
+  transition: background 180ms ease, color 180ms ease, transform 150ms ease;
+}
+
+.bottom-nav button:active {
+  transform: scale(0.9);
 }
 
 .bottom-nav svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
+}
+
+.bottom-nav .add-nav-item {
+  border-radius: 16px;
 }
 
 .bottom-nav .add-nav-item svg {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
 }
