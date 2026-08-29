@@ -696,7 +696,7 @@ textarea:focus-visible {
 .priority-badge-pill.urgent    { background: #fee2e2; color: #dc2626; }
 
 /* ============================================================ */
-/*  Board View (Kanban with Independent Vertical Scrolling)      */
+/*  Board View (Kanban with Dynamic Height based on content)     */
 /* ============================================================ */
 
 .board-view {
@@ -704,9 +704,8 @@ textarea:focus-visible {
   gap: 16px;
   overflow-x: auto;
   padding-bottom: 24px;
-  height: calc(100vh - 120px);
-  min-height: 480px;
-  align-items: flex-start;
+  align-items: flex-start; /* CRITICAL: natural dynamic height per column */
+  min-height: calc(100vh - 130px);
   scrollbar-width: thin;
 }
 
@@ -714,14 +713,15 @@ textarea:focus-visible {
   flex: 0 0 290px;
   width: 290px;
   min-width: 290px;
-  height: 100%;
-  max-height: 100%;
+  height: fit-content; /* Dynamic height based on task count */
+  max-height: calc(100vh - 140px); /* Vertical scroll only when overflowing */
   border-radius: 16px;
   background: var(--panel);
   border: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  align-self: flex-start;
   transition: border-color 200ms ease, background 200ms ease;
 }
 
@@ -807,15 +807,15 @@ textarea:focus-visible {
   font-size: 0.86rem;
 }
 
-/* Independent Column Scrolling (Fixing desktop scroll issue) */
+/* Independent Column Scrolling */
 .board-column-body {
   flex: 1 1 auto;
   overflow-y: auto;
   min-height: 0;
-  padding: 10px;
+  padding: 8px 10px 10px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   scrollbar-width: thin;
 }
 
@@ -986,7 +986,7 @@ textarea:focus-visible {
   font-size: 0.88rem;
   cursor: pointer;
   transition: background 150ms ease, color 150ms ease;
-  margin-top: auto;
+  margin-top: 4px;
   flex-shrink: 0;
 }
 
@@ -1048,7 +1048,7 @@ textarea:focus-visible {
 }
 
 /* ============================================================ */
-/*  Task Detail Modal (Trello Wide 2-Col Card Modal - Img 2 & 3) */
+/*  Task Detail Modal (Trello Wide 2-Col Card Modal - Img 1 & 2) */
 /* ============================================================ */
 
 .detail-modal-layer {
@@ -1063,9 +1063,12 @@ textarea:focus-visible {
   overflow-y: auto;
 }
 
-.trello-wide-modal-card {
-  width: min(100%, 1080px);
-  max-height: 92vh;
+/* Modal Wide Card (Width 1050px) */
+.detail-modal-layer .trello-wide-modal-card {
+  width: min(94vw, 1050px) !important;
+  max-width: 1050px !important;
+  min-width: min(100%, 720px);
+  max-height: 90vh;
   overflow-y: auto;
   border-radius: 20px;
   background: var(--surface-raised);
@@ -1115,10 +1118,16 @@ textarea:focus-visible {
 }
 
 .trello-modal-top-bar {
-  padding: 16px 24px 0;
+  padding: 16px 28px 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.detail-list-badge-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .detail-list-badge {
@@ -1141,7 +1150,7 @@ textarea:focus-visible {
 }
 
 .detail-modal-header {
-  padding: 12px 24px 8px;
+  padding: 12px 28px 8px;
 }
 
 .detail-title-row {
@@ -1187,6 +1196,7 @@ textarea:focus-visible {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
+  align-items: center;
 }
 
 .detail-chip-group {
@@ -1201,6 +1211,7 @@ textarea:focus-visible {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
+  white-space: nowrap;
 }
 
 .member-pill {
@@ -1212,6 +1223,7 @@ textarea:focus-visible {
   background: var(--panel);
   font-size: 0.78rem;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .label-badge-pill {
@@ -1220,6 +1232,7 @@ textarea:focus-visible {
   color: #ffffff;
   font-size: 0.76rem;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .date-chip-pill {
@@ -1231,14 +1244,16 @@ textarea:focus-visible {
   background: var(--panel);
   font-size: 0.78rem;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 /* 2-Column Main Workspace Layout */
 .trello-modal-2col-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr);
-  gap: 24px;
-  padding: 14px 24px 28px;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 28px;
+  padding: 16px 28px 32px;
+  align-items: start;
 }
 
 .trello-col-left {
@@ -1254,7 +1269,7 @@ textarea:focus-visible {
   gap: 14px;
   min-width: 0;
   border-left: 1px solid var(--border);
-  padding-left: 20px;
+  padding-left: 24px;
 }
 
 .trello-section {
@@ -1267,6 +1282,7 @@ textarea:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
 }
 
 .trello-section-title {
@@ -1274,8 +1290,9 @@ textarea:focus-visible {
   align-items: center;
   gap: 8px;
   font-weight: 700;
-  font-size: 0.94rem;
+  font-size: 0.96rem;
   color: var(--ink);
+  white-space: nowrap;
 }
 
 .count-pill {
@@ -1288,16 +1305,18 @@ textarea:focus-visible {
 }
 
 .trello-edit-btn {
-  padding: 4px 10px;
+  padding: 5px 12px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--ink);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .trello-edit-btn:hover {
@@ -1460,7 +1479,7 @@ textarea:focus-visible {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 10px;
+  padding: 12px;
 }
 
 .comment-textarea {
@@ -1472,7 +1491,7 @@ textarea:focus-visible {
   color: var(--ink);
   font-size: 0.86rem;
   resize: vertical;
-  min-height: 50px;
+  min-height: 60px;
 }
 
 .comment-img-preview-card {
@@ -1825,28 +1844,88 @@ textarea:focus-visible {
   background: var(--primary-soft);
 }
 
+/* Modern Toggle Switch Slider for Alarm (แท็บเลื่อนเปิดปิด) */
 .alarm-box {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: 12px;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
   background: var(--panel);
+  border: 1px solid var(--border);
 }
 
-.alarm-box div:first-child {
+.alarm-box-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.alarm-box strong {
-  font-size: 0.84rem;
+.alarm-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.alarm-box span {
-  font-size: 0.76rem;
+.alarm-bell-icon {
+  color: var(--primary-strong);
+}
+
+.alarm-title-group strong {
+  font-size: 0.88rem;
+  display: block;
+}
+
+.alarm-title-group span {
+  font-size: 0.74rem;
   color: var(--muted);
+  display: block;
+}
+
+/* Slider Switch (แท็บเลื่อนเปิดปิด) */
+.toggle-switch-wrap {
+  position: relative;
+  display: inline-block;
+  width: 46px;
+  height: 24px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.toggle-switch-wrap input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background-color: var(--border-strong);
+  border-radius: 999px;
+  transition: background-color 200ms ease;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25);
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toggle-switch-wrap input:checked + .toggle-slider {
+  background-color: var(--trello-blue);
+}
+
+.toggle-switch-wrap input:checked + .toggle-slider:before {
+  transform: translateX(22px);
 }
 
 .form-actions,
@@ -2454,7 +2533,7 @@ textarea:focus-visible {
     flex: 0 0 82vw;
     width: 82vw;
     min-width: 82vw;
-    height: calc(100vh - 170px);
+    height: fit-content;
     max-height: calc(100vh - 170px);
   }
 
@@ -2491,7 +2570,8 @@ textarea:focus-visible {
     padding-top: 16px;
   }
 
-  .trello-wide-modal-card {
+  .detail-modal-layer .trello-wide-modal-card {
+    min-width: 100%;
     max-height: 94vh;
     border-radius: 16px;
   }

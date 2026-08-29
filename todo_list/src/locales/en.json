@@ -142,5 +142,6 @@
   "attachments": "Attachments & Data Images",
   "addAttachment": "Add Image",
   "makeCover": "Make Card Cover",
-  "removeCover": "Remove Card Cover"
+  "removeCover": "Remove Card Cover",
+  "position": "Position"
 }

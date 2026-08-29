@@ -142,5 +142,6 @@
   "attachments": "รูปภาพประกอบ & ข้อมูล",
   "addAttachment": "เพิ่มรูปข้อมูล",
   "makeCover": "ตั้งเป็นหน้าปกการ์ด",
-  "removeCover": "นำออกจากหน้าปก"
+  "removeCover": "นำออกจากหน้าปก",
+  "position": "ตำแหน่ง"
 }

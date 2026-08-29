@@ -440,17 +440,23 @@ export default function TodoList() {
     }
   }, [deletingTodo, detailTodo, t]);
 
-  const moveTodo = useCallback(async (todoId: number, targetListId: number) => {
+  const moveTodo = useCallback(async (todoId: number, targetListId: number, position?: number) => {
     setError("");
     try {
       const res = await fetch(`${API_BASE}/todos/${todoId}/move`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ listId: targetListId }),
+        body: JSON.stringify({ listId: targetListId, position }),
       });
       if (!res.ok) throw new Error("Unable to move todo");
       const movedTodo = normalizeTodo(await res.json());
-      setTodos((cur) => cur.map((t) => (t.id === todoId ? movedTodo : t)));
+      
+      // Refresh list to update all positions correctly
+      if (activeBoardId) {
+        void fetchListsAndTodos(activeBoardId);
+      } else {
+        setTodos((cur) => cur.map((t) => (t.id === todoId ? movedTodo : t)));
+      }
       if (detailTodo && detailTodo.id === todoId) {
         setDetailTodo(movedTodo);
       }
@@ -458,7 +464,7 @@ export default function TodoList() {
       console.error(fetchError);
       setError(t("updateError"));
     }
-  }, [detailTodo, t]);
+  }, [activeBoardId, detailTodo, fetchListsAndTodos, t]);
 
   /* ---- CRUD: Lists ---- */
 
@@ -836,6 +842,7 @@ export default function TodoList() {
       {detailTodo && (
         <TaskDetailModal
           todo={detailTodo}
+          allTodos={todos}
           lists={lists}
           t={t}
           dateLocale={dateLocale}
@@ -1011,7 +1018,7 @@ function Navigation({ activeView, labels, onChange, variant, onCreateClick }: { 
 }
 
 /* ============================================================ */
-/*  Board View — Kanban                                          */
+/*  Board View — Kanban (Dynamic Height + Exact Reordering)      */
 /* ============================================================ */
 
 function BoardView({
@@ -1036,7 +1043,7 @@ function BoardView({
   dateLocale: string;
   isLoading: boolean;
   onAddCard: (listId: number) => void;
-  onMoveCard: (todoId: number, listId: number) => void;
+  onMoveCard: (todoId: number, listId: number, position?: number) => void;
   onToggle: (todo: Todo) => void;
   onEdit: (todo: Todo) => void;
   onDelete: (todo: Todo) => void;
@@ -1057,7 +1064,9 @@ function BoardView({
   return (
     <section className="board-view" aria-label={t("board")}>
       {lists.map((list) => {
-        const cards = todos.filter((td) => td.listId === list.id);
+        const cards = todos
+          .filter((td) => td.listId === list.id)
+          .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
         const isDragOver = overListId === list.id;
 
         return (
@@ -1070,7 +1079,7 @@ function BoardView({
             onDrop={(e) => {
               e.preventDefault();
               if (dragId !== null) {
-                onMoveCard(dragId, list.id);
+                onMoveCard(dragId, list.id, cards.length);
                 setDragId(null);
                 setOverListId(null);
               }
@@ -1098,13 +1107,23 @@ function BoardView({
             </div>
 
             <div className="board-column-body">
-              {cards.map((todo) => (
+              {cards.map((todo, cardIndex) => (
                 <div
                   key={todo.id}
                   className={`board-card color-${normalizeColor(todo.color)} ${todo.completed ? "is-completed" : ""} ${dragId === todo.id ? "is-dragging" : ""}`}
                   draggable
                   onDragStart={(e) => { setDragId(todo.id); e.dataTransfer.effectAllowed = "move"; }}
                   onDragEnd={() => { setDragId(null); setOverListId(null); }}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (dragId !== null && dragId !== todo.id) {
+                      onMoveCard(dragId, list.id, cardIndex);
+                      setDragId(null);
+                      setOverListId(null);
+                    }
+                  }}
                   onClick={() => onOpenDetail(todo)}
                 >
                   {/* Compact Card Cover Thumbnail if attached */}
@@ -1204,6 +1223,7 @@ function BoardView({
 
 function TaskDetailModal({
   todo,
+  allTodos,
   lists,
   t,
   dateLocale,
@@ -1213,13 +1233,14 @@ function TaskDetailModal({
   onMove,
 }: {
   todo: Todo;
+  allTodos: Todo[];
   lists: BoardList[];
   t: (key: TranslationKey) => string;
   dateLocale: string;
   onClose: () => void;
   onUpdate: (id: number, updates: Partial<Todo>) => Promise<Todo | null>;
   onDelete: (todo: Todo) => void;
-  onMove: (todoId: number, listId: number) => void;
+  onMove: (todoId: number, listId: number, position?: number) => void;
 }) {
   const [title, setTitle] = useState(todo.title);
   const [note, setNote] = useState(todo.note || "");
@@ -1243,6 +1264,11 @@ function TaskDetailModal({
 
   const dataImageFileInputRef = useRef<HTMLInputElement>(null);
   const commentFileInputRef = useRef<HTMLInputElement>(null);
+
+  // List cards count for position selector
+  const currentListCards = useMemo(() => {
+    return allTodos.filter((t) => t.listId === (todo.listId ?? lists[0]?.id));
+  }, [allTodos, todo.listId, lists]);
 
   // Fetch comments
   useEffect(() => {
@@ -1426,7 +1452,7 @@ function TaskDetailModal({
   return (
     <div className="modal-layer detail-modal-layer" role="presentation" onMouseDown={onClose}>
       <article
-        className="modal-card trello-wide-modal-card"
+        className="trello-wide-modal-card"
         role="dialog"
         aria-modal="true"
         onMouseDown={(e) => e.stopPropagation()}
@@ -1446,16 +1472,30 @@ function TaskDetailModal({
           </div>
         )}
 
-        {/* Modal Top Header Bar */}
+        {/* Modal Top Header Bar with List & Position Selectors */}
         <div className="trello-modal-top-bar">
-          <div className="detail-list-badge">
-            <span>{t("inList")}</span>
-            <select
-              value={todo.listId ?? ""}
-              onChange={(e) => onMove(todo.id, Number(e.target.value))}
-            >
-              {lists.map((l) => <option key={l.id} value={l.id}>{l.title}</option>)}
-            </select>
+          <div className="detail-list-badge-group">
+            <div className="detail-list-badge">
+              <span>{t("inList")}</span>
+              <select
+                value={todo.listId ?? ""}
+                onChange={(e) => onMove(todo.id, Number(e.target.value))}
+              >
+                {lists.map((l) => <option key={l.id} value={l.id}>{l.title}</option>)}
+              </select>
+            </div>
+
+            <div className="detail-list-badge">
+              <span>{t("position")}</span>
+              <select
+                value={todo.position ?? 0}
+                onChange={(e) => onMove(todo.id, todo.listId ?? lists[0]?.id, Number(e.target.value))}
+              >
+                {Array.from({ length: Math.max(currentListCards.length, 1) }, (_, i) => (
+                  <option key={i} value={i}>{i + 1}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="top-bar-right-controls">
@@ -1807,7 +1847,7 @@ function TaskDetailModal({
 }
 
 /* ============================================================ */
-/*  Task Form (Modal Create with Live Data Image Preview)        */
+/*  Task Form (Create Modal with Toggle Switch & Live Preview)   */
 /* ============================================================ */
 
 function TaskForm({
@@ -1972,9 +2012,26 @@ function TaskForm({
         </fieldset>
       </div>
 
+      {/* Modern Toggle Switch Slider for Alarm (แท็บเลื่อนเปิดปิด) */}
       <section className="alarm-box" aria-label={t("reminder")}>
-        <div><strong>{t("reminder")}</strong><span>{t("alarmDate")} / {t("alarmTime")}</span></div>
-        <label className="switch"><input type="checkbox" checked={form.alarmEnabled} onChange={(event) => updateField("alarmEnabled", event.target.checked)} /><span />{t("reminder")}</label>
+        <div className="alarm-box-header">
+          <div className="alarm-title-group">
+            <Bell size={17} className="alarm-bell-icon" />
+            <div>
+              <strong>{t("reminder")}</strong>
+              <span>{t("alarmDate")} / {t("alarmTime")}</span>
+            </div>
+          </div>
+          <label className="toggle-switch-wrap" aria-label={t("reminder")}>
+            <input
+              type="checkbox"
+              checked={form.alarmEnabled}
+              onChange={(event) => updateField("alarmEnabled", event.target.checked)}
+            />
+            <span className="toggle-slider" />
+          </label>
+        </div>
+
         {form.alarmEnabled && (
           <div className="form-grid two alarm-inputs">
             <label>{t("alarmDate")}<input type="date" value={form.alarmDate} onChange={(event) => updateField("alarmDate", event.target.value)} /></label>
@@ -2003,7 +2060,7 @@ function TaskPreview({ title, todos, t, dateLocale, isLoading, onAdd, onToggle, 
   return <section className="card task-preview"><div className="section-title"><div><span className="eyebrow">{t("selectedDay")}</span><h2>{title}</h2></div><button type="button" onClick={onAdd}>{t("add")}</button></div>{isLoading ? <SkeletonList compact /> : todos.length === 0 ? <p className="muted-empty">{t("noTasksDate")}</p> : todos.slice(0, 5).map((todo) => <button key={todo.id} type="button" className={`preview-row color-${normalizeColor(todo.color)}`} onClick={() => onOpenDetail(todo)}><span onClick={(e) => { e.stopPropagation(); onToggle(todo); }}>{todo.completed ? <CheckCircle2 size={18} /> : <Circle size={18} />}</span><span>{todo.title}</span><small>{formatDateHeading(getTodoDueDate(todo), dateLocale, true)}</small></button>)}</section>;
 }
 
-function TaskCard({ todo, t, dateLocale, lists, onEdit, onToggle, onDelete, onMove, onOpenDetail }: { todo: Todo; t: (key: TranslationKey) => string; dateLocale: string; lists: BoardList[]; onEdit: () => void; onToggle: () => void; onDelete: () => void; onMove: (todoId: number, listId: number) => void; onOpenDetail: (todo: Todo) => void }) {
+function TaskCard({ todo, t, dateLocale, lists, onEdit, onToggle, onDelete, onMove, onOpenDetail }: { todo: Todo; t: (key: TranslationKey) => string; dateLocale: string; lists: BoardList[]; onEdit: () => void; onToggle: () => void; onDelete: () => void; onMove: (todoId: number, listId: number, position?: number) => void; onOpenDetail: (todo: Todo) => void }) {
   const priority = normalizePriority(todo.priority);
   const category = normalizeCategory(todo.category);
   const color = normalizeColor(todo.color);

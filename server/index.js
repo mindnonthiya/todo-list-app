@@ -487,7 +487,20 @@ app.put("/api/todos/:id/move", async (req, res) => {
     const { id } = req.params;
     const { listId, position: pos } = req.body;
     if (!listId) return res.status(400).json({ message: "listId is required" });
+
+    const targetPos = typeof pos === "number" ? pos : null;
+
+    if (targetPos !== null) {
+      // Shift any existing cards at or after targetPos in the target list
+      await pool.query(
+        "UPDATE todos SET position = position + 1 WHERE list_id = $1 AND position >= $2 AND id != $3",
+        [listId, targetPos, id]
+      );
+    }
+
     const maxPos = await pool.query("SELECT COALESCE(MAX(position), -1) AS mp FROM todos WHERE list_id = $1", [listId]);
+    const finalPos = targetPos !== null ? targetPos : maxPos.rows[0].mp + 1;
+
     const result = await pool.query(
       `UPDATE todos SET list_id=$1, position=$2, updated_at=CURRENT_TIMESTAMP WHERE id=$3
        RETURNING id, board_id AS "boardId", title, note, description, completed, color, priority, category,
@@ -496,7 +509,7 @@ app.put("/api/todos/:id/move", async (req, res) => {
                  list_id AS "listId", position, image_url AS "imageUrl", images,
                  (SELECT COUNT(*) FROM todo_comments WHERE todo_comments.todo_id = todos.id)::int AS "commentsCount",
                  created_at, updated_at`,
-      [listId, pos ?? maxPos.rows[0].mp + 1, id]
+      [listId, finalPos, id]
     );
     if (result.rowCount === 0) return res.status(404).json({ message: "Todo not found" });
     res.json(normalizeTodo(result.rows[0]));
