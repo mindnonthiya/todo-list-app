@@ -1,4 +1,4 @@
-import { type CSSProperties, type ReactNode, forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   Bell,
@@ -19,7 +19,6 @@ import {
   ImageIcon,
   LayoutDashboard,
   ListTodo,
-  LogOut,
   Menu,
   MessageSquare,
   Moon,
@@ -210,13 +209,10 @@ export default function TodoList() {
   const [detailTodo, setDetailTodo] = useState<Todo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [profileOpen, setProfileOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const avatarButtonRef = useRef<HTMLButtonElement>(null);
-  const profileMenuRef = useRef<HTMLDivElement>(null);
   const boardDropdownRef = useRef<HTMLDivElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const mobileDrawerRef = useRef<HTMLDivElement>(null);
@@ -281,9 +277,6 @@ export default function TodoList() {
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (profileOpen && !avatarButtonRef.current?.contains(target) && !profileMenuRef.current?.contains(target)) {
-        setProfileOpen(false);
-      }
       if (boardDropdownOpen && !boardDropdownRef.current?.contains(target)) {
         setBoardDropdownOpen(false);
       }
@@ -294,7 +287,7 @@ export default function TodoList() {
 
     window.addEventListener("pointerdown", handlePointerDown);
     return () => window.removeEventListener("pointerdown", handlePointerDown);
-  }, [profileOpen, boardDropdownOpen, moreMenuOpen]);
+  }, [boardDropdownOpen, moreMenuOpen]);
 
   /* ---- Derived data ---- */
 
@@ -666,7 +659,7 @@ export default function TodoList() {
                 )}
               </div>
 
-              {/* "+ สร้างบอร์ด" Button right next to Board selector */}
+              {/* "+ สร้างบอร์ดใหม่" Button right next to Board selector */}
               <button
                 type="button"
                 className="topbar-create-board-btn"
@@ -709,18 +702,10 @@ export default function TodoList() {
                 <LanguageToggle language={language} onChange={setLanguage} />
               </div>
 
-              {/* Desktop User Profile Avatar */}
-              <div className="user-area desktop-only-btn">
-                <button
-                  type="button"
-                  className="avatar-button"
-                  ref={avatarButtonRef}
-                  aria-label={t("profile")}
-                  aria-expanded={profileOpen}
-                  onClick={() => setProfileOpen((isOpen) => !isOpen)}
-                >
-                  <User size={17} />
-                </button>
+              {/* Desktop User Profile Badge (Clean info, no unnecessary menu) */}
+              <div className="user-profile-badge desktop-only-btn">
+                <User size={14} className="user-badge-icon" />
+                <span>Nonthiya (mj.)</span>
               </div>
 
               {/* Desktop More Menu */}
@@ -755,16 +740,6 @@ export default function TodoList() {
                 <Menu size={20} />
               </button>
             </div>
-
-            {/* Profile Popover Desktop */}
-            {profileOpen && (
-              <UserMenu
-                ref={profileMenuRef}
-                onClose={() => setProfileOpen(false)}
-                onToggleTheme={toggleTheme}
-                themeLabel={theme === "dark" ? t("light") : t("dark")}
-              />
-            )}
           </header>
 
           {/* Mobile Drawer (Hamburger Menu Sheet) */}
@@ -773,20 +748,20 @@ export default function TodoList() {
               <aside className="mobile-drawer" ref={mobileDrawerRef} onClick={(e) => e.stopPropagation()}>
                 <div className="drawer-header">
                   <div className="drawer-user-info">
-                    <div className="drawer-avatar"><User size={20} /></div>
+                    <div className="drawer-avatar"><User size={18} /></div>
                     <div>
                       <strong>Nonthiya (mj.)</strong>
                       <small>{currentBoard.title}</small>
                     </div>
                   </div>
-                  <button type="button" className="icon-btn" onClick={() => setMobileDrawerOpen(false)}><X size={20} /></button>
+                  <button type="button" className="icon-btn" onClick={() => setMobileDrawerOpen(false)}><X size={18} /></button>
                 </div>
 
                 <div className="drawer-menu-list">
                   {/* Theme Switcher Row */}
                   <div className="drawer-item" onClick={toggleTheme}>
                     <div className="drawer-item-left">
-                      {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+                      {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
                       <span>{t("theme")}</span>
                     </div>
                     <span className="drawer-badge">{theme === "dark" ? t("light") : t("dark")}</span>
@@ -795,7 +770,7 @@ export default function TodoList() {
                   {/* Language Switcher Row */}
                   <div className="drawer-item">
                     <div className="drawer-item-left">
-                      <Palette size={18} />
+                      <Palette size={17} />
                       <span>{t("language")}</span>
                     </div>
                     <LanguageToggle language={language} onChange={setLanguage} />
@@ -804,7 +779,7 @@ export default function TodoList() {
                   {/* Switch to Analytics */}
                   <div className="drawer-item" onClick={() => { setActiveView("progress"); setMobileDrawerOpen(false); }}>
                     <div className="drawer-item-left">
-                      <BarChart3 size={18} />
+                      <BarChart3 size={17} />
                       <span>{t("analytics")}</span>
                     </div>
                   </div>
@@ -812,7 +787,7 @@ export default function TodoList() {
                   {/* Refresh Board */}
                   <div className="drawer-item" onClick={() => { if (activeBoardId) void fetchListsAndTodos(activeBoardId); setMobileDrawerOpen(false); }}>
                     <div className="drawer-item-left">
-                      <CheckCircle2 size={18} />
+                      <CheckCircle2 size={17} />
                       <span>รีเฟรชบอร์ด</span>
                     </div>
                   </div>
@@ -1012,28 +987,6 @@ export default function TodoList() {
 /*  Sub-components                                               */
 /* ============================================================ */
 
-const UserMenu = forwardRef<HTMLDivElement, { onClose: () => void; onToggleTheme: () => void; themeLabel: string }>(function UserMenu({ onClose, onToggleTheme, themeLabel }, ref) {
-  const { t, language, setLanguage } = useLanguage();
-
-  return (
-    <div className="popover-layer" role="presentation" onClick={onClose}>
-      <div ref={ref} className="profile-menu" role="menu" onClick={(event) => event.stopPropagation()}>
-        <div className="drawer-handle" aria-hidden="true" />
-        <div className="profile-menu-header">
-          <div className="profile-menu-avatar"><User size={20} /></div>
-          <div>
-            <strong>Nonthiya (mj.)</strong>
-            <span>Productivity Master</span>
-          </div>
-        </div>
-        <button type="button" role="menuitem" onClick={onToggleTheme}><Palette size={16} /> {t("theme")} · {themeLabel}</button>
-        <div className="menu-language" role="group" aria-label={t("language")}><span>{t("language")}</span><LanguageToggle language={language} onChange={setLanguage} /></div>
-        <button type="button" role="menuitem" onClick={onClose}><LogOut size={16} /> {t("logout")}</button>
-      </div>
-    </div>
-  );
-});
-
 function LanguageToggle({ language, onChange }: { language: "en" | "th"; onChange: (language: "en" | "th") => void }) {
   return <div className="language-toggle" role="group" aria-label="Language"><button type="button" className={language === "th" ? "is-active" : ""} onClick={() => onChange("th")}>TH</button><button type="button" className={language === "en" ? "is-active" : ""} onClick={() => onChange("en")}>EN</button></div>;
 }
@@ -1050,25 +1003,25 @@ function Navigation({ activeView, labels, onChange, variant, onCreateClick }: { 
     return (
       <nav className="bottom-nav" aria-label="Mobile navigation">
         <button type="button" className={activeView === "board" ? "is-active" : ""} onClick={() => onChange("board")}>
-          <LayoutDashboard size={18} />
+          <LayoutDashboard size={17} />
           <span>{labels.board}</span>
         </button>
         <button type="button" className={activeView === "calendar" ? "is-active" : ""} onClick={() => onChange("calendar")}>
-          <CalendarDays size={18} />
+          <CalendarDays size={17} />
           <span>{labels.calendar}</span>
         </button>
         {onCreateClick && (
           <button type="button" className="add-nav-item" onClick={onCreateClick} aria-label="Create Task">
-            <Plus size={20} />
+            <Plus size={18} />
             <span>สร้าง</span>
           </button>
         )}
         <button type="button" className={activeView === "tasks" ? "is-active" : ""} onClick={() => onChange("tasks")}>
-          <ListTodo size={18} />
+          <ListTodo size={17} />
           <span>{labels.tasks}</span>
         </button>
         <button type="button" className={activeView === "progress" ? "is-active" : ""} onClick={() => onChange("progress")}>
-          <BarChart3 size={18} />
+          <BarChart3 size={17} />
           <span>{labels.progress}</span>
         </button>
       </nav>
@@ -1177,8 +1130,8 @@ function BoardView({
                     <span className="board-column-count">{cards.length}</span>
                   </div>
                   <div className="board-column-actions">
-                    <button type="button" className="icon-btn" onClick={() => { setEditListId(list.id); setEditListTitle(list.title); }} aria-label={t("editList")}><Pencil size={14} /></button>
-                    <button type="button" className="icon-btn" onClick={() => onDeleteList(list)} aria-label={t("deleteList")}><Trash2 size={14} /></button>
+                    <button type="button" className="icon-btn" onClick={() => { setEditListId(list.id); setEditListTitle(list.title); }} aria-label={t("editList")}><Pencil size={13} /></button>
+                    <button type="button" className="icon-btn" onClick={() => onDeleteList(list)} aria-label={t("deleteList")}><Trash2 size={13} /></button>
                   </div>
                 </>
               )}
@@ -1238,32 +1191,32 @@ function BoardView({
                         onClick={(e) => { e.stopPropagation(); onToggle(todo); }}
                         aria-label={todo.completed ? "Pending" : "Completed"}
                       >
-                        {todo.completed ? <CheckCircle2 size={16} /> : <Circle size={16} />}
+                        {todo.completed ? <CheckCircle2 size={15} /> : <Circle size={15} />}
                       </button>
                       <h4 className={todo.completed ? "is-completed-text" : ""}>{todo.title}</h4>
-                      <GripVertical size={14} className="drag-handle" aria-hidden="true" />
+                      <GripVertical size={13} className="drag-handle" aria-hidden="true" />
                     </div>
 
                     {todo.note && <p className="board-card-note">{todo.note}</p>}
 
                     <div className="board-card-meta">
                       <span className={`priority-badge ${normalizePriority(todo.priority)}`}>
-                        <Flag size={11} />
+                        <Flag size={10} />
                         {t(normalizePriority(todo.priority))}
                       </span>
-                      <span><Folder size={11} />{t(normalizeCategory(todo.category))}</span>
-                      {todo.dueDate && <span><CalendarDays size={11} />{formatDateHeading(getTodoDueDate(todo), dateLocale, true)}</span>}
+                      <span><Folder size={10} />{t(normalizeCategory(todo.category))}</span>
+                      {todo.dueDate && <span><CalendarDays size={10} />{formatDateHeading(getTodoDueDate(todo), dateLocale, true)}</span>}
                       {Boolean(todo.images && todo.images.length > 0) && (
-                        <span><Paperclip size={11} />{todo.images ? todo.images.length : 0}</span>
+                        <span><Paperclip size={10} />{todo.images ? todo.images.length : 0}</span>
                       )}
                       {Boolean(todo.commentsCount && todo.commentsCount > 0) && (
-                        <span className="comment-badge"><MessageSquare size={11} />{todo.commentsCount}</span>
+                        <span className="comment-badge"><MessageSquare size={10} />{todo.commentsCount}</span>
                       )}
                     </div>
 
                     <div className="board-card-actions" onClick={(e) => e.stopPropagation()}>
-                      <button type="button" className="icon-btn" onClick={() => onEdit(todo)} aria-label="Edit title"><Pencil size={13} /></button>
-                      <button type="button" className="icon-btn" onClick={() => onDelete(todo)} aria-label="Delete"><Trash2 size={13} /></button>
+                      <button type="button" className="icon-btn" onClick={() => onEdit(todo)} aria-label="Edit title"><Pencil size={12} /></button>
+                      <button type="button" className="icon-btn" onClick={() => onDelete(todo)} aria-label="Delete"><Trash2 size={12} /></button>
                       <select
                         className="board-card-move"
                         value={todo.listId ?? ""}
@@ -1278,7 +1231,7 @@ function BoardView({
               ))}
 
               <button type="button" className="board-add-card" onClick={() => onAddCard(list.id)}>
-                <Plus size={15} /> <span>{t("addCard")}</span>
+                <Plus size={14} /> <span>{t("addCard")}</span>
               </button>
             </div>
           </div>
@@ -1297,14 +1250,14 @@ function BoardView({
               onKeyDown={(e) => { if (e.key === "Escape") { setNewListMode(false); setNewListTitle(""); } }}
             />
             <div className="board-new-list-btns">
-              <button type="submit" className="save-button"><Check size={16} /> {t("add")}</button>
-              <button type="button" className="secondary-button" onClick={() => { setNewListMode(false); setNewListTitle(""); }}><X size={16} /></button>
+              <button type="submit" className="save-button"><Check size={15} /> {t("add")}</button>
+              <button type="button" className="secondary-button" onClick={() => { setNewListMode(false); setNewListTitle(""); }}><X size={15} /></button>
             </div>
           </form>
         </div>
       ) : (
         <button type="button" className="board-add-list" onClick={() => setNewListMode(true)}>
-          <Plus size={16} /> <span>{t("addList")}</span>
+          <Plus size={15} /> <span>{t("addList")}</span>
         </button>
       )}
     </section>
@@ -1376,48 +1329,48 @@ function CalendarPlannerView({
         <div className="cal-topbar-left">
           {/* Month selector button */}
           <button type="button" className="cal-month-badge">
-            <Calendar size={15} />
+            <Calendar size={14} />
             <span>{monthLabel}</span>
           </button>
 
           {/* Month navigation buttons */}
           <div className="cal-nav-btn-group">
             <button type="button" className="cal-nav-btn" onClick={onPrevMonth} aria-label="Previous Month">
-              <ChevronLeft size={16} />
+              <ChevronLeft size={15} />
             </button>
             <button type="button" className="cal-today-btn" onClick={onToday}>
               Today
             </button>
             <button type="button" className="cal-nav-btn" onClick={onNextMonth} aria-label="Next Month">
-              <ChevronRight size={16} />
+              <ChevronRight size={15} />
             </button>
           </div>
 
           {/* View mode dropdown */}
           <div className="cal-view-selector-wrap">
             <button type="button" className="cal-view-btn" onClick={onToggleViewMenu}>
-              <CalendarDays size={15} />
-              <ChevronDown size={13} />
+              <CalendarDays size={14} />
+              <ChevronDown size={12} />
             </button>
 
             {viewMenuOpen && (
               <div className="cal-view-menu-dropdown">
                 <div className="cal-menu-header">Change view</div>
                 <button type="button" onClick={() => onSetViewMode("day")}>
-                  <Calendar size={14} /> <span>Day</span>
-                  {viewMode === "day" && <Check size={14} className="check-active" />}
+                  <Calendar size={13} /> <span>Day</span>
+                  {viewMode === "day" && <Check size={13} className="check-active" />}
                 </button>
                 <button type="button" onClick={() => onSetViewMode("week")}>
-                  <CalendarDays size={14} /> <span>Week</span>
-                  {viewMode === "week" && <Check size={14} className="check-active" />}
+                  <CalendarDays size={13} /> <span>Week</span>
+                  {viewMode === "week" && <Check size={13} className="check-active" />}
                 </button>
                 <button type="button" onClick={() => onSetViewMode("month")}>
-                  <Calendar size={14} /> <span>Month</span>
-                  {viewMode === "month" && <Check size={14} className="check-active" />}
+                  <Calendar size={13} /> <span>Month</span>
+                  {viewMode === "month" && <Check size={13} className="check-active" />}
                 </button>
                 <button type="button" onClick={() => onSetViewMode("agenda")}>
-                  <ListTodo size={14} /> <span>Agenda</span>
-                  {viewMode === "agenda" && <Check size={14} className="check-active" />}
+                  <ListTodo size={13} /> <span>Agenda</span>
+                  {viewMode === "agenda" && <Check size={13} className="check-active" />}
                 </button>
               </div>
             )}
@@ -1427,7 +1380,7 @@ function CalendarPlannerView({
         {/* Board Title Label on Topbar Right (Matching Screenshot 2) */}
         <div className="cal-topbar-right">
           <div className="cal-board-title-pill">
-            <LayoutDashboard size={14} />
+            <LayoutDashboard size={13} />
             <strong>{boardTitle}</strong>
           </div>
         </div>
@@ -1473,7 +1426,7 @@ function CalendarPlannerView({
                         }}
                         title={td.title}
                       >
-                        {td.completed ? <CheckCircle2 size={11} className="chip-icon check" /> : <Circle size={11} className="chip-icon" />}
+                        {td.completed ? <CheckCircle2 size={10} className="chip-icon check" /> : <Circle size={10} className="chip-icon" />}
                         <span className="chip-title">{td.title}</span>
                       </div>
                     ))}
@@ -1494,7 +1447,7 @@ function CalendarPlannerView({
             <h3>Planner</h3>
             <p>งานในบอร์ด <strong>{boardTitle}</strong></p>
             <button type="button" className="cal-add-task-btn" onClick={onAddCard}>
-              <Plus size={15} /> <span>{t("addTask")}</span>
+              <Plus size={14} /> <span>{t("addTask")}</span>
             </button>
           </div>
 
@@ -1529,7 +1482,7 @@ function CalendarPlannerView({
                           onToggleTodo(td);
                         }}
                       >
-                        {td.completed ? <CheckCircle2 size={16} /> : <Circle size={16} />}
+                        {td.completed ? <CheckCircle2 size={15} /> : <Circle size={15} />}
                       </button>
                       <strong className={td.completed ? "is-completed-text" : ""}>{td.title}</strong>
                     </div>
@@ -1538,11 +1491,11 @@ function CalendarPlannerView({
 
                     <div className="cal-card-meta">
                       <span className={`priority-badge ${normalizePriority(td.priority)}`}>
-                        <Flag size={11} /> {t(normalizePriority(td.priority))}
+                        <Flag size={10} /> {t(normalizePriority(td.priority))}
                       </span>
-                      {td.dueTime && <span><Clock size={11} /> {td.dueTime}</span>}
+                      {td.dueTime && <span><Clock size={10} /> {td.dueTime}</span>}
                       {Boolean(td.commentsCount && td.commentsCount > 0) && (
-                        <span className="comment-badge"><MessageSquare size={11} /> {td.commentsCount}</span>
+                        <span className="comment-badge"><MessageSquare size={10} /> {td.commentsCount}</span>
                       )}
                     </div>
                   </div>
@@ -2399,22 +2352,22 @@ function TaskCard({ todo, t, dateLocale, lists, onEdit, onToggle, onDelete, onMo
   return (
     <article className={`task-card color-${color} ${todo.completed ? "is-completed" : ""}`} onClick={() => onOpenDetail(todo)}>
       <button type="button" className="complete-button" onClick={(e) => { e.stopPropagation(); onToggle(); }} aria-label={todo.completed ? t("pending") : t("completed")}>
-        {todo.completed ? <CheckCircle2 size={20} /> : <Circle size={20} />}
+        {todo.completed ? <CheckCircle2 size={18} /> : <Circle size={18} />}
       </button>
       <div className="task-content">
         <h3>{todo.title}</h3>
         {todo.note && <p>{todo.note}</p>}
         <div className="task-meta">
-          <span><Folder size={14} />{t(category)}</span>
-          <span className={`priority-badge ${priority}`}><Flag size={14} />{t(priority)}</span>
-          <span><CalendarDays size={14} />{formatDateHeading(getTodoDueDate(todo), dateLocale, true)}</span>
-          {todo.dueTime && <span><Clock size={14} />{todo.dueTime}</span>}
-          {alarmActive && <span className="reminder-badge"><Bell size={14} />{formatAlarm(todo.alarmDateTime, dateLocale)}</span>}
+          <span><Folder size={12} />{t(category)}</span>
+          <span className={`priority-badge ${priority}`}><Flag size={12} />{t(priority)}</span>
+          <span><CalendarDays size={12} />{formatDateHeading(getTodoDueDate(todo), dateLocale, true)}</span>
+          {todo.dueTime && <span><Clock size={12} />{todo.dueTime}</span>}
+          {alarmActive && <span className="reminder-badge"><Bell size={12} />{formatAlarm(todo.alarmDateTime, dateLocale)}</span>}
           {Boolean(todo.images && todo.images.length > 0) && (
-            <span><Paperclip size={13} />{todo.images ? todo.images.length : 0}</span>
+            <span><Paperclip size={12} />{todo.images ? todo.images.length : 0}</span>
           )}
           {Boolean(todo.commentsCount && todo.commentsCount > 0) && (
-            <span className="comment-badge"><MessageSquare size={13} />{todo.commentsCount}</span>
+            <span className="comment-badge"><MessageSquare size={12} />{todo.commentsCount}</span>
           )}
           {lists.length > 0 && (
             <select
@@ -2430,8 +2383,8 @@ function TaskCard({ todo, t, dateLocale, lists, onEdit, onToggle, onDelete, onMo
         </div>
       </div>
       <div className="task-actions" onClick={(e) => e.stopPropagation()}>
-        <button type="button" onClick={onEdit} aria-label={t("editTask")}><Pencil size={17} /></button>
-        <button type="button" onClick={onDelete} aria-label={t("delete")}><Trash2 size={17} /></button>
+        <button type="button" onClick={onEdit} aria-label={t("editTask")}><Pencil size={15} /></button>
+        <button type="button" onClick={onDelete} aria-label={t("delete")}><Trash2 size={15} /></button>
       </div>
     </article>
   );
@@ -2489,7 +2442,7 @@ function buildCalendarDays(baseDate: Date, selectedDate: string): CalendarDay[] 
   const year = baseDate.getFullYear();
   const month = baseDate.getMonth();
   const firstOfMonth = new Date(year, month, 1);
-  const sundayIndex = firstOfMonth.getDay(); // Sunday-first matching screenshot 2
+  const sundayIndex = firstOfMonth.getDay();
   const start = new Date(year, month, 1 - sundayIndex);
 
   return Array.from({ length: 35 }, (_, index) => {
