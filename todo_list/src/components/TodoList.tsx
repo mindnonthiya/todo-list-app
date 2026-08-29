@@ -19,6 +19,7 @@ import {
   Flame,
   Folder,
   Flag,
+  Gamepad2,
   GripVertical,
   HelpCircle,
   ImageIcon,
@@ -26,14 +27,18 @@ import {
   ListTodo,
   Menu,
   MessageSquare,
+  Mic,
   Moon,
+  Music,
   Palette,
   Paperclip,
+  PartyPopper,
   Pencil,
   Plus,
   Search,
   Settings,
   Sparkles,
+  Square,
   Sun,
   Trash2,
   TrendingUp,
@@ -51,6 +56,14 @@ import {
   idbGet,
   getLocalStorageUsage,
 } from "../utils/storageHelper";
+import {
+  type SoundTheme,
+  SOUND_THEMES,
+  playSoundEffect,
+  saveCustomSound,
+  getCustomSound,
+  deleteCustomSound,
+} from "../utils/soundManager";
 import "./TodoList.css";
 
 type Filter = "all" | "active" | "completed";
@@ -197,31 +210,7 @@ const createDefaultFormState = (boardId: number | null = null, listId: number | 
   images: [],
 });
 
-/* Web Audio API Chime Sound on completion */
-function playCompletionSound() {
-  try {
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
 
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1); // A5
-
-    gain.gain.setValueAtTime(0.12, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.24);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start();
-    osc.stop(ctx.currentTime + 0.25);
-  } catch (err) {
-    console.error("Audio error", err);
-  }
-}
 
 /* Default Initial Starter Data for Fresh Users */
 const DEFAULT_INITIAL_BOARDS: Board[] = [
@@ -407,6 +396,37 @@ export default function TodoList() {
     const saved = localStorage.getItem("todo_show_mobile_progress");
     return saved !== null ? saved === "true" : true;
   });
+
+  const [soundTheme, setSoundTheme] = useState<SoundTheme>(() => {
+    const saved = localStorage.getItem("todo_sound_theme") as SoundTheme;
+    return saved && ["chime", "pop", "retro", "marimba", "tada", "custom"].includes(saved) ? saved : "chime";
+  });
+  const [customSoundUrl, setCustomSoundUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    getCustomSound().then((url) => {
+      if (url) setCustomSoundUrl(url);
+    });
+  }, []);
+
+  const handleSoundThemeChange = (theme: SoundTheme) => {
+    setSoundTheme(theme);
+    safeLocalStorageSet("todo_sound_theme", theme);
+  };
+
+  const handleSaveCustomSound = async (audioUrl: string) => {
+    await saveCustomSound(audioUrl);
+    setCustomSoundUrl(audioUrl);
+    setSoundTheme("custom");
+    safeLocalStorageSet("todo_sound_theme", "custom");
+  };
+
+  const handleDeleteCustomSound = async () => {
+    await deleteCustomSound();
+    setCustomSoundUrl(null);
+    setSoundTheme("chime");
+    safeLocalStorageSet("todo_sound_theme", "chime");
+  };
 
   const handleToggleMobileProgress = (enabled: boolean) => {
     setShowMobileProgress(enabled);
@@ -605,7 +625,7 @@ export default function TodoList() {
 
   const updateTodo = useCallback((id: number, updates: Partial<Todo>) => {
     if (updates.completed === true && soundEnabled) {
-      playCompletionSound();
+      playSoundEffect(soundTheme, customSoundUrl);
     }
 
     setTodos((prev) =>
@@ -620,7 +640,7 @@ export default function TodoList() {
         return t;
       })
     );
-  }, [detailTodo, soundEnabled]);
+  }, [detailTodo, soundEnabled, soundTheme, customSoundUrl]);
 
   const deleteTodo = useCallback(() => {
     if (!deletingTodo) return;
@@ -1259,6 +1279,11 @@ export default function TodoList() {
                 setSoundEnabled(enabled);
                 localStorage.setItem("todo_sound_enabled", String(enabled));
               }}
+              soundTheme={soundTheme}
+              onSoundThemeChange={handleSoundThemeChange}
+              customSoundUrl={customSoundUrl}
+              onSaveCustomSound={handleSaveCustomSound}
+              onDeleteCustomSound={handleDeleteCustomSound}
               accentColor={accentColor}
               onAccentChange={setAccentColor}
               firstDayOfWeek={firstDayOfWeek}
@@ -2822,6 +2847,335 @@ function AnalyticsDashboardView({
 }
 
 /* ============================================================ */
+/*  Voice & Sound Theme Settings Component                       */
+/* ============================================================ */
+
+function VoiceSoundRecorder({
+  soundTheme,
+  onSoundThemeChange,
+  customSoundUrl,
+  onSaveCustomSound,
+  onDeleteCustomSound,
+}: {
+  soundTheme: SoundTheme;
+  onSoundThemeChange: (theme: SoundTheme) => void;
+  customSoundUrl: string | null;
+  onSaveCustomSound: (audioUrl: string) => Promise<void>;
+  onDeleteCustomSound: () => Promise<void>;
+}) {
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [recordedBlobUrl, setRecordedBlobUrl] = useState<string | null>(null);
+  const [recordedBase64, setRecordedBase64] = useState<string | null>(null);
+  const [isPlayingPreview, setIsPlayingPreview] = useState(false);
+  const [recordError, setRecordError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<number | null>(null);
+  const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
+  const customAudioInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (audioPreviewRef.current) audioPreviewRef.current.pause();
+    };
+  }, []);
+
+  const startRecording = async () => {
+    setRecordError(null);
+    setRecordedBlobUrl(null);
+    setRecordedBase64(null);
+    setSaveSuccess(false);
+
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setRecordError("เบราว์เซอร์นี้ไม่รองรับการอัดเสียงผ่านไมโครโฟน");
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+
+      let mimeType = "audio/webm";
+      if (!MediaRecorder.isTypeSupported("audio/webm")) {
+        if (MediaRecorder.isTypeSupported("audio/mp4")) {
+          mimeType = "audio/mp4";
+        } else if (MediaRecorder.isTypeSupported("audio/ogg")) {
+          mimeType = "audio/ogg";
+        } else {
+          mimeType = "";
+        }
+      }
+
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        const blobUrl = URL.createObjectURL(audioBlob);
+        setRecordedBlobUrl(blobUrl);
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setRecordedBase64(reader.result as string);
+        };
+        reader.readAsDataURL(audioBlob);
+
+        stream.getTracks().forEach((track) => track.stop());
+        setIsRecording(false);
+        if (timerRef.current) clearInterval(timerRef.current);
+      };
+
+      recorder.start(100);
+      setIsRecording(true);
+      setRecordingSeconds(0);
+
+      const startTime = Date.now();
+      timerRef.current = window.setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        setRecordingSeconds(elapsed);
+        if (elapsed >= 4) {
+          stopRecording();
+        }
+      }, 200);
+    } catch (err) {
+      console.error("Mic error:", err);
+      setRecordError("ไม่สามารถเข้าถึงไมโครโฟนได้ กรุณาอนุญาต Microphone Permissions ในเบราว์เซอร์");
+      setIsRecording(false);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+  };
+
+  const playRecordedPreview = (urlToPlay: string) => {
+    if (audioPreviewRef.current) {
+      audioPreviewRef.current.pause();
+    }
+    const audio = new Audio(urlToPlay);
+    audioPreviewRef.current = audio;
+    setIsPlayingPreview(true);
+    audio.onended = () => setIsPlayingPreview(false);
+    audio.onerror = () => setIsPlayingPreview(false);
+    audio.play().catch(() => setIsPlayingPreview(false));
+  };
+
+  const handleSaveRecorded = async () => {
+    if (!recordedBase64) return;
+    await onSaveCustomSound(recordedBase64);
+    onSoundThemeChange("custom");
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3000);
+  };
+
+  const handleAudioFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = reader.result as string;
+        if (base64) {
+          await onSaveCustomSound(base64);
+          onSoundThemeChange("custom");
+          setRecordedBlobUrl(URL.createObjectURL(file));
+          setRecordedBase64(base64);
+          setSaveSuccess(true);
+          setTimeout(() => setSaveSuccess(false), 3000);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const getThemeIcon = (id: SoundTheme) => {
+    switch (id) {
+      case "chime":
+        return <Bell size={14} />;
+      case "pop":
+        return <Sparkles size={14} />;
+      case "retro":
+        return <Gamepad2 size={14} />;
+      case "marimba":
+        return <Music size={14} />;
+      case "tada":
+        return <PartyPopper size={14} />;
+      case "custom":
+        return <Mic size={14} />;
+      default:
+        return <Volume2 size={14} />;
+    }
+  };
+
+  return (
+    <div className="voice-sound-settings-wrapper compact-sound-wrapper">
+      {/* 1. Compact Theme Pills Grid */}
+      <div className="sound-themes-compact-grid">
+        {SOUND_THEMES.map((theme) => {
+          const isSelected = soundTheme === theme.id;
+          const isCustom = theme.id === "custom";
+
+          return (
+            <div
+              key={theme.id}
+              className={`sound-pill-card ${isSelected ? "is-selected" : ""}`}
+              onClick={() => onSoundThemeChange(theme.id)}
+            >
+              <div className="sound-pill-left">
+                <div className="sound-pill-icon">{getThemeIcon(theme.id)}</div>
+                <span className="sound-pill-name">{theme.name}</span>
+              </div>
+
+              <div className="sound-pill-actions">
+                <button
+                  type="button"
+                  className="sound-pill-play-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    playSoundEffect(theme.id, isCustom ? customSoundUrl : null);
+                  }}
+                  title="ทดลองฟังเสียง"
+                  aria-label="Play sound preview"
+                >
+                  <Volume2 size={12} />
+                </button>
+                {isSelected && <Check size={12} className="sound-pill-check" />}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 2. Sleek Minimal Custom Voice Recorder Bar */}
+      <div className="compact-voice-bar">
+        <div className="compact-voice-info">
+          <Mic size={14} className={isRecording ? "pulse-red" : "mic-icon-muted"} />
+          <span>{customSoundUrl ? "มีเสียงที่คุณบันทึกไว้แล้ว" : "อัดเสียงของคุณเอง (1-4 วิ)"}</span>
+        </div>
+
+        <div className="compact-voice-actions">
+          {!isRecording ? (
+            <button
+              type="button"
+              className="compact-rec-btn start-rec"
+              onClick={startRecording}
+              title="กดเพื่อเริ่มอัดเสียง"
+            >
+              <div className="rec-dot-mini" />
+              <span>{customSoundUrl ? "อัดใหม่" : "เริ่มอัด"}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="compact-rec-btn stop-rec"
+              onClick={stopRecording}
+            >
+              <Square size={11} />
+              <span>หยุด ({recordingSeconds}s)</span>
+            </button>
+          )}
+
+          {recordedBlobUrl && (
+            <>
+              <button
+                type="button"
+                className="compact-action-btn"
+                onClick={() => playRecordedPreview(recordedBlobUrl)}
+                disabled={isPlayingPreview}
+                title="ฟังเสียงที่เพิ่งอัด"
+              >
+                <Volume2 size={13} />
+                <span>{isPlayingPreview ? "..." : "ฟัง"}</span>
+              </button>
+
+              <button
+                type="button"
+                className="compact-action-btn save-btn"
+                onClick={handleSaveRecorded}
+                title="บันทึกเสียงนี้"
+              >
+                <Check size={13} />
+                <span>บันทึก</span>
+              </button>
+            </>
+          )}
+
+          {customSoundUrl && !recordedBlobUrl && (
+            <button
+              type="button"
+              className="compact-action-btn"
+              onClick={() => playSoundEffect("custom", customSoundUrl)}
+              title="ฟังเสียงปัจจุบัน"
+            >
+              <Volume2 size={13} />
+              <span>ฟังเสียง</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            className="compact-action-btn icon-only-btn"
+            onClick={() => customAudioInputRef.current?.click()}
+            title="อัปโหลดไฟล์เสียง (.mp3, .wav)"
+          >
+            <Upload size={13} />
+          </button>
+          <input
+            type="file"
+            ref={customAudioInputRef}
+            style={{ display: "none" }}
+            accept="audio/*,.mp3,.wav,.ogg,.m4a"
+            onChange={handleAudioFileUpload}
+          />
+
+          {customSoundUrl && (
+            <button
+              type="button"
+              className="compact-action-btn danger-icon-btn"
+              onClick={async () => {
+                await onDeleteCustomSound();
+                onSoundThemeChange("chime");
+                setRecordedBlobUrl(null);
+                setRecordedBase64(null);
+              }}
+              title="ลบเสียงที่อัด"
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {recordError && (
+        <div className="voice-record-error compact-alert">
+          <AlertTriangle size={13} /> <span>{recordError}</span>
+        </div>
+      )}
+
+      {saveSuccess && (
+        <div className="voice-record-success compact-alert">
+          <Check size={13} /> <span>บันทึกเสียงเรียบร้อยแล้ว</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================ */
 /*  Full-Featured Settings Page                                  */
 /* ============================================================ */
 
@@ -2830,6 +3184,11 @@ function SettingsView({
   onUserNameChange,
   soundEnabled,
   onSoundToggle,
+  soundTheme,
+  onSoundThemeChange,
+  customSoundUrl,
+  onSaveCustomSound,
+  onDeleteCustomSound,
   accentColor,
   onAccentChange,
   firstDayOfWeek,
@@ -2850,6 +3209,11 @@ function SettingsView({
   onUserNameChange: (val: string) => void;
   soundEnabled: boolean;
   onSoundToggle: (enabled: boolean) => void;
+  soundTheme: SoundTheme;
+  onSoundThemeChange: (theme: SoundTheme) => void;
+  customSoundUrl: string | null;
+  onSaveCustomSound: (audioUrl: string) => Promise<void>;
+  onDeleteCustomSound: () => Promise<void>;
   accentColor: AccentColor;
   onAccentChange: (val: AccentColor) => void;
   firstDayOfWeek: "sun" | "mon";
@@ -2982,27 +3346,27 @@ function SettingsView({
         <div className="settings-row">
           <div>
             <strong>{t("completionSound")}</strong>
-            <small>เล่นเสียงเอฟเฟกต์ Chime เมื่อกดติ๊กถูกทำงานสำเร็จ</small>
+            <small>เปิด/ปิดเสียงเอฟเฟกต์เมื่อกดติ๊กถูกทำงานสำเร็จ</small>
           </div>
-          <div className="sound-toggle-actions">
-            <button
-              type="button"
-              className="test-sound-btn"
-              onClick={() => playCompletionSound()}
-              title="Test Sound FX"
-            >
-              ทดสอบเสียง
-            </button>
-            <label className="toggle-switch-wrap">
-              <input
-                type="checkbox"
-                checked={soundEnabled}
-                onChange={(e) => onSoundToggle(e.target.checked)}
-              />
-              <span className="toggle-slider" />
-            </label>
-          </div>
+          <label className="toggle-switch-wrap">
+            <input
+              type="checkbox"
+              checked={soundEnabled}
+              onChange={(e) => onSoundToggle(e.target.checked)}
+            />
+            <span className="toggle-slider" />
+          </label>
         </div>
+
+        {soundEnabled && (
+          <VoiceSoundRecorder
+            soundTheme={soundTheme}
+            onSoundThemeChange={onSoundThemeChange}
+            customSoundUrl={customSoundUrl}
+            onSaveCustomSound={onSaveCustomSound}
+            onDeleteCustomSound={onDeleteCustomSound}
+          />
+        )}
       </div>
 
       {/* 4. Language & Regional */}
