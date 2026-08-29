@@ -315,7 +315,7 @@ export default function TodoList() {
         if (sortMode === "oldest") return timestamp(a.created_at) - timestamp(b.created_at);
         if (sortMode === "completed") return Number(a.completed) - Number(b.completed);
         if (sortMode === "priority") return priorityRank[normalizePriority(b.priority)] - priorityRank[normalizePriority(a.priority)];
-        return timestamp(b.created_at) - timestamp(a.created_at);
+        return (a.position ?? 0) - (b.position ?? 0) || timestamp(b.created_at) - timestamp(a.created_at);
       });
   }, [filter, search, sortMode, todos]);
 
@@ -440,31 +440,44 @@ export default function TodoList() {
     }
   }, [deletingTodo, detailTodo, t]);
 
-  const moveTodo = useCallback(async (todoId: number, targetListId: number, position?: number) => {
-    setError("");
-    try {
-      const res = await fetch(`${API_BASE}/todos/${todoId}/move`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ listId: targetListId, position }),
+  // Smooth Optimistic Drag & Drop with Zero Flickering / No Reload
+  const moveTodo = useCallback((todoId: number, targetListId: number, targetPos?: number) => {
+    setTodos((currentTodos) => {
+      const todoToMove = currentTodos.find((t) => t.id === todoId);
+      if (!todoToMove) return currentTodos;
+
+      const remaining = currentTodos.filter((t) => t.id !== todoId);
+      const targetListItems = remaining
+        .filter((t) => t.listId === targetListId)
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+
+      const insertIndex = typeof targetPos === "number" ? Math.max(0, Math.min(targetPos, targetListItems.length)) : targetListItems.length;
+
+      targetListItems.splice(insertIndex, 0, {
+        ...todoToMove,
+        listId: targetListId,
+        position: insertIndex,
       });
-      if (!res.ok) throw new Error("Unable to move todo");
-      const movedTodo = normalizeTodo(await res.json());
-      
-      // Refresh list to update all positions correctly
-      if (activeBoardId) {
-        void fetchListsAndTodos(activeBoardId);
-      } else {
-        setTodos((cur) => cur.map((t) => (t.id === todoId ? movedTodo : t)));
-      }
-      if (detailTodo && detailTodo.id === todoId) {
-        setDetailTodo(movedTodo);
-      }
-    } catch (fetchError) {
-      console.error(fetchError);
-      setError(t("updateError"));
+
+      const reindexedTarget = targetListItems.map((t, idx) => ({ ...t, position: idx }));
+      const otherListsItems = remaining.filter((t) => t.listId !== targetListId);
+
+      return [...otherListsItems, ...reindexedTarget];
+    });
+
+    if (detailTodo && detailTodo.id === todoId) {
+      setDetailTodo((prev) => prev ? { ...prev, listId: targetListId, position: targetPos ?? prev.position } : null);
     }
-  }, [activeBoardId, detailTodo, fetchListsAndTodos, t]);
+
+    // Silent background sync with server
+    fetch(`${API_BASE}/todos/${todoId}/move`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ listId: targetListId, position: targetPos }),
+    }).catch((err) => {
+      console.error("Move error:", err);
+    });
+  }, [detailTodo]);
 
   /* ---- CRUD: Lists ---- */
 
@@ -835,7 +848,7 @@ export default function TodoList() {
         </section>
       </div>
 
-      {/* Mobile Bottom Navigation Bar */}
+      {/* Mobile Bottom Navigation Bar (Always Visible & Pinned) */}
       <Navigation activeView={activeView} labels={viewLabels} onChange={setActiveView} variant="bottom" onCreateClick={() => openCreateDialog()} />
 
       {/* Task Detail Modal (Trello Wide Card Details with Real-time Images & Comments) */}
@@ -974,25 +987,25 @@ function Navigation({ activeView, labels, onChange, variant, onCreateClick }: { 
     return (
       <nav className="bottom-nav" aria-label="Mobile navigation">
         <button type="button" className={activeView === "board" ? "is-active" : ""} onClick={() => onChange("board")}>
-          <LayoutDashboard size={19} />
+          <LayoutDashboard size={18} />
           <span>{labels.board}</span>
         </button>
         <button type="button" className={activeView === "calendar" ? "is-active" : ""} onClick={() => onChange("calendar")}>
-          <CalendarDays size={19} />
+          <CalendarDays size={18} />
           <span>{labels.calendar}</span>
         </button>
         {onCreateClick && (
           <button type="button" className="add-nav-item" onClick={onCreateClick} aria-label="Create Task">
-            <Plus size={22} />
+            <Plus size={20} />
             <span>สร้าง</span>
           </button>
         )}
         <button type="button" className={activeView === "tasks" ? "is-active" : ""} onClick={() => onChange("tasks")}>
-          <ListTodo size={19} />
+          <ListTodo size={18} />
           <span>{labels.tasks}</span>
         </button>
         <button type="button" className={activeView === "progress" ? "is-active" : ""} onClick={() => onChange("progress")}>
-          <BarChart3 size={19} />
+          <BarChart3 size={18} />
           <span>{labels.progress}</span>
         </button>
       </nav>
@@ -1018,7 +1031,7 @@ function Navigation({ activeView, labels, onChange, variant, onCreateClick }: { 
 }
 
 /* ============================================================ */
-/*  Board View — Kanban (Dynamic Height + Exact Reordering)      */
+/*  Board View — Kanban (Smooth Live Drag & Drop)                */
 /* ============================================================ */
 
 function BoardView({
@@ -1054,6 +1067,7 @@ function BoardView({
 }) {
   const [dragId, setDragId] = useState<number | null>(null);
   const [overListId, setOverListId] = useState<number | null>(null);
+  const [overCardId, setOverCardId] = useState<number | null>(null);
   const [newListMode, setNewListMode] = useState(false);
   const [newListTitle, setNewListTitle] = useState("");
   const [editListId, setEditListId] = useState<number | null>(null);
@@ -1082,6 +1096,7 @@ function BoardView({
                 onMoveCard(dragId, list.id, cards.length);
                 setDragId(null);
                 setOverListId(null);
+                setOverCardId(null);
               }
             }}
           >
@@ -1110,11 +1125,26 @@ function BoardView({
               {cards.map((todo, cardIndex) => (
                 <div
                   key={todo.id}
-                  className={`board-card color-${normalizeColor(todo.color)} ${todo.completed ? "is-completed" : ""} ${dragId === todo.id ? "is-dragging" : ""}`}
+                  className={`board-card color-${normalizeColor(todo.color)} ${todo.completed ? "is-completed" : ""} ${dragId === todo.id ? "is-dragging" : ""} ${overCardId === todo.id && dragId !== todo.id ? "card-drag-target" : ""}`}
                   draggable
-                  onDragStart={(e) => { setDragId(todo.id); e.dataTransfer.effectAllowed = "move"; }}
-                  onDragEnd={() => { setDragId(null); setOverListId(null); }}
-                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDragStart={(e) => {
+                    setDragId(todo.id);
+                    e.dataTransfer.effectAllowed = "move";
+                  }}
+                  onDragEnd={() => {
+                    setDragId(null);
+                    setOverListId(null);
+                    setOverCardId(null);
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (overCardId !== todo.id) setOverCardId(todo.id);
+                  }}
+                  onDragLeave={(e) => {
+                    e.stopPropagation();
+                    if (overCardId === todo.id) setOverCardId(null);
+                  }}
                   onDrop={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -1122,6 +1152,7 @@ function BoardView({
                       onMoveCard(dragId, list.id, cardIndex);
                       setDragId(null);
                       setOverListId(null);
+                      setOverCardId(null);
                     }
                   }}
                   onClick={() => onOpenDetail(todo)}
@@ -1184,7 +1215,7 @@ function BoardView({
               ))}
 
               <button type="button" className="board-add-card" onClick={() => onAddCard(list.id)}>
-                <Plus size={16} /> <span>{t("addCard")}</span>
+                <Plus size={15} /> <span>{t("addCard")}</span>
               </button>
             </div>
           </div>
@@ -1210,7 +1241,7 @@ function BoardView({
         </div>
       ) : (
         <button type="button" className="board-add-list" onClick={() => setNewListMode(true)}>
-          <Plus size={18} /> <span>{t("addList")}</span>
+          <Plus size={16} /> <span>{t("addList")}</span>
         </button>
       )}
     </section>
@@ -1305,7 +1336,6 @@ function TaskDetailModal({
             reader.onload = (uploadEvent) => {
               const base64Url = uploadEvent.target?.result as string;
               if (base64Url) {
-                // If comment box is active, attach to comment; otherwise add to card images gallery!
                 if (newComment.trim() || document.activeElement?.className?.includes("comment-textarea")) {
                   setCommentImage(base64Url);
                 } else {
