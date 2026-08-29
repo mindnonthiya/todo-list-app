@@ -31,7 +31,6 @@ import {
   Paperclip,
   Pencil,
   Plus,
-  RefreshCw,
   Search,
   Settings,
   Sparkles,
@@ -1902,7 +1901,15 @@ function CalendarPlannerView({
             <button
               type="button"
               className="cal-month-badge"
-              onClick={() => monthInputRef.current?.showPicker?.() || monthInputRef.current?.click()}
+              onClick={() => {
+                if (monthInputRef.current) {
+                  if (typeof monthInputRef.current.showPicker === "function") {
+                    monthInputRef.current.showPicker();
+                  } else {
+                    monthInputRef.current.click();
+                  }
+                }
+              }}
               title="Select Month / Year"
             >
               <Calendar size={14} />
