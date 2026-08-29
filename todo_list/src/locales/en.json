@@ -108,5 +108,18 @@
   "deleteListWarning": "All tasks in this list will be moved to the first list.",
   "listName": "List name",
   "moveTask": "Move to",
-  "list": "List"
+  "list": "List",
+  "create": "Create",
+  "comments": "Comments",
+  "activity": "Activity",
+  "writeComment": "Write a comment or progress update...",
+  "postComment": "Send",
+  "deleteComment": "Delete comment",
+  "coverImage": "Cover Image",
+  "uploadImage": "Upload Image",
+  "pasteImage": "Paste image (Ctrl+V) or choose file",
+  "removeImage": "Remove Cover",
+  "inList": "in list",
+  "details": "Details",
+  "noCommentsYet": "No comments yet. Be the first to share an update!"
 }

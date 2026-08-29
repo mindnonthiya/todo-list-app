@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Circle,
@@ -13,21 +14,22 @@ import {
   Folder,
   Flag,
   GripVertical,
+  ImageIcon,
   LayoutDashboard,
   ListTodo,
   LogOut,
+  MessageSquare,
   Moon,
+  MoreHorizontal,
   Palette,
   Pencil,
   Plus,
   Search,
-  Settings,
-  Star,
+  Send,
   Sun,
   Trash2,
-  Trophy,
+  Upload,
   User,
-  UserCircle,
   X,
 } from "lucide-react";
 import { type TranslationKey } from "../contexts/language-core";
@@ -36,13 +38,13 @@ import { useTheme } from "../hooks/useTheme";
 import "./TodoList.css";
 
 type Filter = "all" | "active" | "completed";
-type PlannerView = "board" | "calendar" | "tasks" | "add" | "progress";
+type PlannerView = "board" | "calendar" | "tasks" | "progress";
 type TaskColor = "green" | "blue" | "yellow" | "orange" | "purple" | "red";
 type Priority = "normal" | "important" | "urgent";
 type Category = "work" | "study" | "personal" | "health" | "other";
 type SortMode = "newest" | "oldest" | "completed" | "priority";
 type Mood = "happy" | "calm" | "tired" | "motivated";
-type DialogMode = "edit" | "delete" | "deleteList" | null;
+type DialogMode = "edit" | "delete" | "deleteList" | "create" | null;
 
 interface Todo {
   id: number;
@@ -59,8 +61,18 @@ interface Todo {
   alarmDateTime?: string | null;
   listId?: number;
   position?: number;
+  imageUrl?: string | null;
+  commentsCount?: number;
   created_at?: string;
   updated_at?: string;
+}
+
+interface TodoComment {
+  id: number;
+  todoId: number;
+  author: string;
+  content: string;
+  createdAt: string;
 }
 
 interface BoardList {
@@ -91,19 +103,20 @@ interface TaskFormState {
   alarmDate: string;
   alarmTime: string;
   listId: number | null;
+  imageUrl: string;
 }
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5000/api/todos";
 const LIST_API_URL = import.meta.env.VITE_LIST_API_URL ?? "http://localhost:5000/api/lists";
 const todayKey = toDateInputValue(new Date());
 
-const COLOR_OPTIONS: Array<{ value: TaskColor; key: "green" | "blue" | "yellow" | "orange" | "purple" | "red" }> = [
-  { value: "green", key: "green" },
-  { value: "blue", key: "blue" },
-  { value: "yellow", key: "yellow" },
-  { value: "orange", key: "orange" },
-  { value: "purple", key: "purple" },
-  { value: "red", key: "red" },
+const COLOR_OPTIONS: Array<{ value: TaskColor; key: "green" | "blue" | "yellow" | "orange" | "purple" | "red"; hex: string }> = [
+  { value: "green", key: "green", hex: "#16a34a" },
+  { value: "blue", key: "blue", hex: "#2563eb" },
+  { value: "yellow", key: "yellow", hex: "#d97706" },
+  { value: "orange", key: "orange", hex: "#ea580c" },
+  { value: "purple", key: "purple", hex: "#9333ea" },
+  { value: "red", key: "red", hex: "#dc2626" },
 ];
 
 const PRIORITY_OPTIONS: Array<{ value: Priority; key: "normal" | "important" | "urgent" }> = [
@@ -132,7 +145,7 @@ const priorityRank: Record<Priority, number> = { normal: 1, important: 2, urgent
 const createDefaultFormState = (listId: number | null = null): TaskFormState => ({
   title: "",
   note: "",
-  color: "green",
+  color: "blue",
   priority: "important",
   category: "work",
   dueDate: todayKey,
@@ -141,6 +154,7 @@ const createDefaultFormState = (listId: number | null = null): TaskFormState => 
   alarmDate: todayKey,
   alarmTime: "09:00",
   listId,
+  imageUrl: "",
 });
 
 /* ============================================================ */
@@ -165,12 +179,18 @@ export default function TodoList() {
   const [editingTitle, setEditingTitle] = useState("");
   const [deletingTodo, setDeletingTodo] = useState<Todo | null>(null);
   const [deletingList, setDeletingList] = useState<BoardList | null>(null);
+  const [detailTodo, setDetailTodo] = useState<Todo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
+  const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const avatarButtonRef = useRef<HTMLButtonElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+  const viewDropdownRef = useRef<HTMLDivElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
 
   const dateLocale = language === "th" ? "th-TH" : "en-US";
 
@@ -213,20 +233,24 @@ export default function TodoList() {
     return () => window.clearTimeout(timeoutId);
   }, [fetchTodos, fetchLists]);
 
+  // Handle clicking outside of menus
   useEffect(() => {
-    if (!profileOpen) return undefined;
-
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (avatarButtonRef.current?.contains(target) || profileMenuRef.current?.contains(target)) {
-        return;
+      if (profileOpen && !avatarButtonRef.current?.contains(target) && !profileMenuRef.current?.contains(target)) {
+        setProfileOpen(false);
       }
-      setProfileOpen(false);
+      if (viewDropdownOpen && !viewDropdownRef.current?.contains(target)) {
+        setViewDropdownOpen(false);
+      }
+      if (moreMenuOpen && !moreMenuRef.current?.contains(target)) {
+        setMoreMenuOpen(false);
+      }
     };
 
     window.addEventListener("pointerdown", handlePointerDown);
     return () => window.removeEventListener("pointerdown", handlePointerDown);
-  }, [profileOpen]);
+  }, [profileOpen, viewDropdownOpen, moreMenuOpen]);
 
   /* ---- Derived data ---- */
 
@@ -258,7 +282,6 @@ export default function TodoList() {
     board: t("board"),
     calendar: t("calendar"),
     tasks: t("tasks"),
-    add: t("addTask"),
     progress: t("analytics"),
   }), [t]);
 
@@ -290,6 +313,7 @@ export default function TodoList() {
           alarmEnabled: form.alarmEnabled,
           alarmDateTime,
           listId: form.listId,
+          imageUrl: form.imageUrl.trim() || null,
         }),
       });
 
@@ -297,8 +321,7 @@ export default function TodoList() {
       const newTodo = normalizeTodo(await res.json());
       setTodos((currentTodos) => [newTodo, ...currentTodos]);
       setForm(createDefaultFormState(form.listId));
-      setFilter("all");
-      setActiveView("board");
+      setDialogMode(null);
     } catch (fetchError) {
       console.error(fetchError);
       setError(t("addError"));
@@ -318,13 +341,16 @@ export default function TodoList() {
       if (!res.ok) throw new Error("Unable to update todo");
       const updatedTodo = normalizeTodo(await res.json());
       setTodos((currentTodos) => currentTodos.map((todo) => (todo.id === id ? updatedTodo : todo)));
+      if (detailTodo && detailTodo.id === id) {
+        setDetailTodo(updatedTodo);
+      }
       return updatedTodo;
     } catch (fetchError) {
       console.error(fetchError);
       setError(t("updateError"));
       return null;
     }
-  }, [t]);
+  }, [detailTodo, t]);
 
   const deleteTodo = useCallback(async () => {
     if (!deletingTodo) return;
@@ -334,13 +360,16 @@ export default function TodoList() {
       const res = await fetch(`${API_URL}/${deletingTodo.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Unable to delete todo");
       setTodos((currentTodos) => currentTodos.filter((todo) => todo.id !== deletingTodo.id));
+      if (detailTodo && detailTodo.id === deletingTodo.id) {
+        setDetailTodo(null);
+      }
       setDialogMode(null);
       setDeletingTodo(null);
     } catch (fetchError) {
       console.error(fetchError);
       setError(t("deleteError"));
     }
-  }, [deletingTodo, t]);
+  }, [deletingTodo, detailTodo, t]);
 
   const moveTodo = useCallback(async (todoId: number, targetListId: number) => {
     setError("");
@@ -353,11 +382,14 @@ export default function TodoList() {
       if (!res.ok) throw new Error("Unable to move todo");
       const movedTodo = normalizeTodo(await res.json());
       setTodos((cur) => cur.map((t) => (t.id === todoId ? movedTodo : t)));
+      if (detailTodo && detailTodo.id === todoId) {
+        setDetailTodo(movedTodo);
+      }
     } catch (fetchError) {
       console.error(fetchError);
       setError(t("updateError"));
     }
-  }, [t]);
+  }, [detailTodo, t]);
 
   /* ---- CRUD: Lists ---- */
 
@@ -399,21 +431,19 @@ export default function TodoList() {
       setLists((cur) => cur.filter((l) => l.id !== deletingList.id));
       setDialogMode(null);
       setDeletingList(null);
-      void fetchTodos(); // re-fetch to update moved todos
+      void fetchTodos();
     } catch (fetchError) {
       console.error(fetchError);
     }
   }, [deletingList, fetchTodos]);
 
-  /* ---- View callbacks ---- */
+  /* ---- Modal / Action Handlers ---- */
 
-  const openAddView = useCallback((targetListId?: number) => {
-    if (targetListId) {
-      setForm((prev) => ({ ...prev, listId: targetListId }));
-    }
-    setActiveView("add");
+  const openCreateDialog = useCallback((targetListId?: number) => {
+    setForm(createDefaultFormState(targetListId ?? (lists[0]?.id || null)));
+    setDialogMode("create");
     window.setTimeout(() => inputRef.current?.focus(), 120);
-  }, []);
+  }, [lists]);
 
   const openEditDialog = useCallback((todo: Todo) => {
     setEditingTodo(todo);
@@ -423,11 +453,9 @@ export default function TodoList() {
 
   const saveEditing = useCallback(async () => {
     const trimmedTitle = editingTitle.trim();
-
     if (!editingTodo || !trimmedTitle) return;
 
     const updatedTodo = await updateTodo(editingTodo.id, { title: trimmedTitle });
-
     if (updatedTodo) {
       setDialogMode(null);
       setEditingTodo(null);
@@ -453,6 +481,14 @@ export default function TodoList() {
     setDeletingList(null);
   }, []);
 
+  const openDetailModal = useCallback((todo: Todo) => {
+    setDetailTodo(todo);
+  }, []);
+
+  const closeDetailModal = useCallback(() => {
+    setDetailTodo(null);
+  }, []);
+
   const monthLabel = currentMonth.toLocaleDateString(dateLocale, { month: "long", year: "numeric" });
 
   /* ---- Render ---- */
@@ -460,12 +496,22 @@ export default function TodoList() {
   return (
     <main className="planner-app">
       <div className="planner-container">
+        {/* Sidebar */}
         <aside className="sidebar" aria-label="Primary navigation">
           <div className="brand-mark">
             <div className="brand-glyph" aria-hidden="true"><LayoutDashboard size={20} /></div>
             <div><strong>{t("appName")}</strong><span>{t("workspace")}</span></div>
           </div>
-          <Navigation activeView={activeView} labels={viewLabels} onChange={setActiveView} onAdd={() => openAddView()} variant="sidebar" />
+
+          <Navigation activeView={activeView} labels={viewLabels} onChange={setActiveView} variant="sidebar" />
+
+          <div className="sidebar-create-section">
+            <button type="button" className="sidebar-create-btn" onClick={() => openCreateDialog()}>
+              <Plus size={18} />
+              <span>{t("create")}</span>
+            </button>
+          </div>
+
           <div className="sidebar-summary">
             <span>{t("completion")}</span>
             <strong>{stats.progress}%</strong>
@@ -473,20 +519,128 @@ export default function TodoList() {
           </div>
         </aside>
 
+        {/* Workspace Main Area */}
         <section className="workspace">
-          <header className="topbar">
-            <div className="topbar-left">
-              <p className="topbar-date">{today.toLocaleDateString(dateLocale, { weekday: "long", month: "long", day: "numeric" })}</p>
-              <h1>{viewLabels[activeView]}</h1>
-            </div>
-            <div className="header-actions">
-              <LanguageToggle language={language} onChange={setLanguage} />
-              <button type="button" className="theme-quick-button" aria-label={t("theme")} onClick={toggleTheme}>{theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}</button>
-              <div className="user-area">
-                <div className="user-copy"><strong>{t("userName")}</strong><span>{t("userLevel")}</span></div>
-                <button type="button" className="avatar-button" ref={avatarButtonRef} aria-label={t("profile")} aria-expanded={profileOpen} onClick={() => setProfileOpen((isOpen) => !isOpen)}><User size={18} /></button>
+          {/* Trello-Style Modern Topbar */}
+          <header className="topbar trello-topbar">
+            <div className="topbar-left-group">
+              <div className="topbar-board-badge">
+                <LayoutDashboard size={18} className="board-badge-icon" />
+                <span className="board-badge-title">{t("workspace")}</span>
+              </div>
+
+              {/* View Switcher Dropdown */}
+              <div className="topbar-view-switcher" ref={viewDropdownRef}>
+                <button
+                  type="button"
+                  className="view-switcher-btn"
+                  onClick={() => setViewDropdownOpen((prev) => !prev)}
+                  aria-expanded={viewDropdownOpen}
+                >
+                  {activeView === "board" && <LayoutDashboard size={16} />}
+                  {activeView === "calendar" && <CalendarDays size={16} />}
+                  {activeView === "tasks" && <ListTodo size={16} />}
+                  {activeView === "progress" && <BarChart3 size={16} />}
+                  <span>{viewLabels[activeView]}</span>
+                  <ChevronDown size={14} className={`dropdown-arrow ${viewDropdownOpen ? "open" : ""}`} />
+                </button>
+
+                {viewDropdownOpen && (
+                  <div className="view-dropdown-menu">
+                    <button type="button" className={activeView === "board" ? "is-active" : ""} onClick={() => { setActiveView("board"); setViewDropdownOpen(false); }}>
+                      <LayoutDashboard size={16} /> <span>{t("board")}</span>
+                    </button>
+                    <button type="button" className={activeView === "calendar" ? "is-active" : ""} onClick={() => { setActiveView("calendar"); setViewDropdownOpen(false); }}>
+                      <CalendarDays size={16} /> <span>{t("calendar")}</span>
+                    </button>
+                    <button type="button" className={activeView === "tasks" ? "is-active" : ""} onClick={() => { setActiveView("tasks"); setViewDropdownOpen(false); }}>
+                      <ListTodo size={16} /> <span>{t("tasks")}</span>
+                    </button>
+                    <button type="button" className={activeView === "progress" ? "is-active" : ""} onClick={() => { setActiveView("progress"); setViewDropdownOpen(false); }}>
+                      <BarChart3 size={16} /> <span>{t("analytics")}</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
+
+            {/* Right Action Tools */}
+            <div className="header-actions">
+              {/* Search Field */}
+              <div className="topbar-search-box">
+                <Search size={16} className="search-icon" />
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={t("searchPlaceholder")}
+                  aria-label={t("searchPlaceholder")}
+                />
+                {search && <button type="button" className="clear-search-btn" onClick={() => setSearch("")}><X size={13} /></button>}
+              </div>
+
+              {/* Prominent "+ Create" Button */}
+              <button
+                type="button"
+                className="trello-create-button"
+                onClick={() => openCreateDialog()}
+                aria-label={t("create")}
+              >
+                <Plus size={17} />
+                <span>{t("create")}</span>
+              </button>
+
+              {/* Language Toggle */}
+              <LanguageToggle language={language} onChange={setLanguage} />
+
+              {/* Theme Toggle */}
+              <button
+                type="button"
+                className="theme-quick-button"
+                aria-label={t("theme")}
+                onClick={toggleTheme}
+              >
+                {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+              </button>
+
+              {/* User Area */}
+              <div className="user-area">
+                <button
+                  type="button"
+                  className="avatar-button"
+                  ref={avatarButtonRef}
+                  aria-label={t("profile")}
+                  aria-expanded={profileOpen}
+                  onClick={() => setProfileOpen((isOpen) => !isOpen)}
+                >
+                  <User size={18} />
+                </button>
+              </div>
+
+              {/* More Actions Menu */}
+              <div className="more-menu-container" ref={moreMenuRef}>
+                <button
+                  type="button"
+                  className="icon-btn more-btn"
+                  onClick={() => setMoreMenuOpen((prev) => !prev)}
+                  aria-label="More options"
+                >
+                  <MoreHorizontal size={18} />
+                </button>
+                {moreMenuOpen && (
+                  <div className="more-dropdown-menu">
+                    <button type="button" onClick={() => { void fetchTodos(); setMoreMenuOpen(false); }}>
+                      <CheckCircle2 size={15} /> <span>รีเฟรชข้อมูล</span>
+                    </button>
+                    <button type="button" onClick={() => { setActiveView("progress"); setMoreMenuOpen(false); }}>
+                      <BarChart3 size={15} /> <span>{t("analytics")}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Profile Popover */}
             {profileOpen && (
               <UserMenu
                 ref={profileMenuRef}
@@ -499,24 +653,27 @@ export default function TodoList() {
 
           {error && <div className="app-error" role="alert">{error}</div>}
 
+          {/* Board View */}
           {activeView === "board" && (
             <BoardView
               lists={lists}
-              todos={todos}
+              todos={visibleTodos}
               t={t}
               dateLocale={dateLocale}
               isLoading={isLoading}
-              onAddCard={(listId) => openAddView(listId)}
+              onAddCard={(listId) => openCreateDialog(listId)}
               onMoveCard={moveTodo}
               onToggle={(todo) => void updateTodo(todo.id, { completed: !todo.completed })}
               onEdit={openEditDialog}
               onDelete={requestDelete}
+              onOpenDetail={openDetailModal}
               onCreateList={createList}
               onUpdateList={updateListTitle}
               onDeleteList={requestDeleteList}
             />
           )}
 
+          {/* Calendar View */}
           {activeView === "calendar" && (
             <section className="calendar-layout" aria-label={t("calendar")}>
               <CalendarPanel
@@ -535,70 +692,131 @@ export default function TodoList() {
                   <StatCard label={t("completedToday")} value={stats.completedToday} icon={<CheckCircle2 size={18} />} />
                   <StatCard label={t("pendingTasks")} value={stats.pending} icon={<Clock size={18} />} />
                 </div>
-                <TaskPreview title={formatDateHeading(selectedDate, dateLocale)} todos={selectedDateTasks} t={t} dateLocale={dateLocale} isLoading={isLoading} onAdd={() => openAddView()} onToggle={(todo) => void updateTodo(todo.id, { completed: !todo.completed })} />
+                <TaskPreview
+                  title={formatDateHeading(selectedDate, dateLocale)}
+                  todos={selectedDateTasks}
+                  t={t}
+                  dateLocale={dateLocale}
+                  isLoading={isLoading}
+                  onAdd={() => openCreateDialog()}
+                  onToggle={(todo) => void updateTodo(todo.id, { completed: !todo.completed })}
+                  onOpenDetail={openDetailModal}
+                />
               </section>
             </section>
           )}
 
+          {/* Tasks List View */}
           {activeView === "tasks" && (
             <section className="tasks-view" aria-label={t("taskList")}>
               <div className="task-toolbar">
-                <label className="search-field" htmlFor="task-search"><Search size={18} /><input id="task-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("searchPlaceholder")} /></label>
+                <label className="search-field" htmlFor="task-search">
+                  <Search size={18} />
+                  <input id="task-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("searchPlaceholder")} />
+                </label>
                 <select aria-label={t("priority")} value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}>
                   <option value="newest">{t("newest")}</option>
                   <option value="oldest">{t("oldest")}</option>
                   <option value="completed">{t("completed")}</option>
                   <option value="priority">{t("priority")}</option>
                 </select>
-                <button type="button" className="primary-button" onClick={() => openAddView()}><Plus size={18} /> {t("addTask")}</button>
+                <button type="button" className="primary-button" onClick={() => openCreateDialog()}><Plus size={18} /> {t("addTask")}</button>
               </div>
               <FilterTabs filter={filter} onChange={setFilter} t={t} />
               <div className="task-board">
-                {isLoading ? <SkeletonList /> : visibleTodos.length === 0 ? <EmptyState onAdd={() => openAddView()} t={t} /> : visibleTodos.map((todo) => (
-                  <TaskCard key={todo.id} todo={todo} t={t} dateLocale={dateLocale} lists={lists} onEdit={() => openEditDialog(todo)} onToggle={() => void updateTodo(todo.id, { completed: !todo.completed })} onDelete={() => requestDelete(todo)} onMove={moveTodo} />
+                {isLoading ? <SkeletonList /> : visibleTodos.length === 0 ? <EmptyState onAdd={() => openCreateDialog()} t={t} /> : visibleTodos.map((todo) => (
+                  <TaskCard
+                    key={todo.id}
+                    todo={todo}
+                    t={t}
+                    dateLocale={dateLocale}
+                    lists={lists}
+                    onEdit={() => openEditDialog(todo)}
+                    onToggle={() => void updateTodo(todo.id, { completed: !todo.completed })}
+                    onDelete={() => requestDelete(todo)}
+                    onMove={moveTodo}
+                    onOpenDetail={openDetailModal}
+                  />
                 ))}
               </div>
             </section>
           )}
 
-          {activeView === "add" && (
-            <section className="add-view" aria-label={t("addTask")}>
-              <div className="form-intro card"><span className="eyebrow">{t("createTask")}</span><h2>{t("formIntroTitle")}</h2><p>{t("formIntroBody")}</p></div>
-              <TaskForm form={form} setForm={setForm} t={t} inputRef={inputRef} onSubmit={addTodo} submitLabel={t("saveTask")} lists={lists} />
-            </section>
-          )}
-
+          {/* Analytics View */}
           {activeView === "progress" && (
             <AnalyticsView stats={stats} todos={todos} selectedMood={selectedMood} onMoodChange={setSelectedMood} t={t} />
           )}
         </section>
       </div>
 
-      <Navigation activeView={activeView} labels={viewLabels} onChange={setActiveView} onAdd={() => openAddView()} variant="bottom" />
+      {/* Bottom Navigation for Mobile */}
+      <Navigation activeView={activeView} labels={viewLabels} onChange={setActiveView} variant="bottom" onCreateClick={() => openCreateDialog()} />
 
+      {/* Task Detail Modal (Trello Card Details with Comments & Cover) */}
+      {detailTodo && (
+        <TaskDetailModal
+          todo={detailTodo}
+          lists={lists}
+          t={t}
+          dateLocale={dateLocale}
+          onClose={closeDetailModal}
+          onUpdate={updateTodo}
+          onDelete={requestDelete}
+          onMove={moveTodo}
+        />
+      )}
+
+      {/* Create Task Modal */}
+      {dialogMode === "create" && (
+        <Modal title={t("createTask")} onClose={closeDialog}>
+          <TaskForm
+            form={form}
+            setForm={setForm}
+            t={t}
+            inputRef={inputRef}
+            onSubmit={addTodo}
+            submitLabel={t("saveTask")}
+            lists={lists}
+            onCancel={closeDialog}
+          />
+        </Modal>
+      )}
+
+      {/* Quick Edit Title Modal */}
       {dialogMode === "edit" && editingTodo && (
         <Modal title={t("editTask")} onClose={closeDialog}>
           <form className="edit-title-form" onSubmit={(event) => { event.preventDefault(); void saveEditing(); }}>
             <label>{t("title")}<input value={editingTitle} onChange={(event) => setEditingTitle(event.target.value)} autoFocus /></label>
-            <div className="modal-actions"><button type="button" className="secondary-button" onClick={closeDialog}>{t("cancel")}</button><button type="submit" className="save-button"><Check size={18} /> {t("save")}</button></div>
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={closeDialog}>{t("cancel")}</button>
+              <button type="submit" className="save-button"><Check size={18} /> {t("save")}</button>
+            </div>
           </form>
         </Modal>
       )}
 
+      {/* Delete Task Confirmation */}
       {dialogMode === "delete" && deletingTodo && (
         <Modal title={t("deleteTask")} onClose={closeDialog} destructive>
           <div className="delete-confirmation">
             <p>{t("deleteWarning")}</p>
-            <div className="modal-actions"><button type="button" className="secondary-button" onClick={closeDialog}>{t("cancel")}</button><button type="button" className="danger-button" onClick={() => void deleteTodo()}>{t("delete")}</button></div>
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={closeDialog}>{t("cancel")}</button>
+              <button type="button" className="danger-button" onClick={() => void deleteTodo()}>{t("delete")}</button>
+            </div>
           </div>
         </Modal>
       )}
 
+      {/* Delete List Confirmation */}
       {dialogMode === "deleteList" && deletingList && (
         <Modal title={t("deleteList")} onClose={closeDialog} destructive>
           <div className="delete-confirmation">
             <p>{t("deleteListWarning")}</p>
-            <div className="modal-actions"><button type="button" className="secondary-button" onClick={closeDialog}>{t("cancel")}</button><button type="button" className="danger-button" onClick={() => void confirmDeleteList()}>{t("delete")}</button></div>
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={closeDialog}>{t("cancel")}</button>
+              <button type="button" className="danger-button" onClick={() => void confirmDeleteList()}>{t("delete")}</button>
+            </div>
           </div>
         </Modal>
       )}
@@ -617,10 +835,16 @@ const UserMenu = forwardRef<HTMLDivElement, { onClose: () => void; onToggleTheme
     <div className="popover-layer" role="presentation" onClick={onClose}>
       <div ref={ref} className="profile-menu" role="menu" onClick={(event) => event.stopPropagation()}>
         <div className="drawer-handle" aria-hidden="true" />
-        <button type="button" role="menuitem"><Settings size={16} /> {t("settings")}</button>
+        <div className="profile-menu-header">
+          <div className="profile-menu-avatar"><User size={20} /></div>
+          <div>
+            <strong>{t("userName")}</strong>
+            <span>{t("userLevel")}</span>
+          </div>
+        </div>
         <button type="button" role="menuitem" onClick={onToggleTheme}><Palette size={16} /> {t("theme")} · {themeLabel}</button>
         <div className="menu-language" role="group" aria-label={t("language")}><span>{t("language")}</span><LanguageToggle language={language} onChange={setLanguage} /></div>
-        <button type="button" role="menuitem"><LogOut size={16} /> {t("logout")}</button>
+        <button type="button" role="menuitem" onClick={onClose}><LogOut size={16} /> {t("logout")}</button>
       </div>
     </div>
   );
@@ -630,21 +854,96 @@ function LanguageToggle({ language, onChange }: { language: "en" | "th"; onChang
   return <div className="language-toggle" role="group" aria-label="Language"><button type="button" className={language === "th" ? "is-active" : ""} onClick={() => onChange("th")}>TH</button><button type="button" className={language === "en" ? "is-active" : ""} onClick={() => onChange("en")}>EN</button></div>;
 }
 
-function Navigation({ activeView, labels, onChange, onAdd, variant }: { activeView: PlannerView; labels: Record<PlannerView, string>; onChange: (view: PlannerView) => void; onAdd: () => void; variant: "sidebar" | "bottom" }) {
-  const items: Array<{ view: PlannerView; icon: ReactNode; action?: () => void }> = [
+function Navigation({ activeView, labels, onChange, variant, onCreateClick }: { activeView: PlannerView; labels: Record<PlannerView, string>; onChange: (view: PlannerView) => void; variant: "sidebar" | "bottom"; onCreateClick?: () => void }) {
+  const items: Array<{ view: PlannerView; icon: ReactNode }> = [
     { view: "board", icon: <LayoutDashboard size={19} /> },
     { view: "calendar", icon: <CalendarDays size={19} /> },
     { view: "tasks", icon: <ListTodo size={19} /> },
-    { view: "add", icon: <Plus size={variant === "bottom" ? 22 : 19} />, action: onAdd },
     { view: "progress", icon: <BarChart3 size={19} /> },
   ];
 
-  return <nav className={variant === "sidebar" ? "nav-list" : "bottom-nav"} aria-label={variant === "sidebar" ? "Sidebar navigation" : "Mobile navigation"}>{items.map((item) => <button key={item.view} type="button" className={`${activeView === item.view ? "is-active" : ""} ${item.view === "add" ? "add-nav-item" : ""}`} onClick={() => item.action ? item.action() : onChange(item.view)} aria-current={activeView === item.view ? "page" : undefined}>{item.icon}<span>{labels[item.view]}</span></button>)}</nav>;
+  if (variant === "bottom") {
+    return (
+      <nav className="bottom-nav" aria-label="Mobile navigation">
+        <button type="button" className={activeView === "board" ? "is-active" : ""} onClick={() => onChange("board")}>
+          <LayoutDashboard size={19} />
+          <span>{labels.board}</span>
+        </button>
+        <button type="button" className={activeView === "calendar" ? "is-active" : ""} onClick={() => onChange("calendar")}>
+          <CalendarDays size={19} />
+          <span>{labels.calendar}</span>
+        </button>
+        {onCreateClick && (
+          <button type="button" className="add-nav-item" onClick={onCreateClick} aria-label="Create Task">
+            <Plus size={22} />
+            <span>สร้าง</span>
+          </button>
+        )}
+        <button type="button" className={activeView === "tasks" ? "is-active" : ""} onClick={() => onChange("tasks")}>
+          <ListTodo size={19} />
+          <span>{labels.tasks}</span>
+        </button>
+        <button type="button" className={activeView === "progress" ? "is-active" : ""} onClick={() => onChange("progress")}>
+          <BarChart3 size={19} />
+          <span>{labels.progress}</span>
+        </button>
+      </nav>
+    );
+  }
+
+  return (
+    <nav className="nav-list" aria-label="Sidebar navigation">
+      {items.map((item) => (
+        <button
+          key={item.view}
+          type="button"
+          className={activeView === item.view ? "is-active" : ""}
+          onClick={() => onChange(item.view)}
+          aria-current={activeView === item.view ? "page" : undefined}
+        >
+          {item.icon}
+          <span>{labels[item.view]}</span>
+        </button>
+      ))}
+    </nav>
+  );
 }
 
-/* ---- Board View ---- */
+/* ============================================================ */
+/*  Board View — Kanban                                          */
+/* ============================================================ */
 
-function BoardView({ lists, todos, t, dateLocale, isLoading, onAddCard, onMoveCard, onToggle, onEdit, onDelete, onCreateList, onUpdateList, onDeleteList }: { lists: BoardList[]; todos: Todo[]; t: (key: TranslationKey) => string; dateLocale: string; isLoading: boolean; onAddCard: (listId: number) => void; onMoveCard: (todoId: number, listId: number) => void; onToggle: (todo: Todo) => void; onEdit: (todo: Todo) => void; onDelete: (todo: Todo) => void; onCreateList: (title: string) => void; onUpdateList: (id: number, title: string) => void; onDeleteList: (list: BoardList) => void }) {
+function BoardView({
+  lists,
+  todos,
+  t,
+  dateLocale,
+  isLoading,
+  onAddCard,
+  onMoveCard,
+  onToggle,
+  onEdit,
+  onDelete,
+  onOpenDetail,
+  onCreateList,
+  onUpdateList,
+  onDeleteList,
+}: {
+  lists: BoardList[];
+  todos: Todo[];
+  t: (key: TranslationKey) => string;
+  dateLocale: string;
+  isLoading: boolean;
+  onAddCard: (listId: number) => void;
+  onMoveCard: (todoId: number, listId: number) => void;
+  onToggle: (todo: Todo) => void;
+  onEdit: (todo: Todo) => void;
+  onDelete: (todo: Todo) => void;
+  onOpenDetail: (todo: Todo) => void;
+  onCreateList: (title: string) => void;
+  onUpdateList: (id: number, title: string) => void;
+  onDeleteList: (list: BoardList) => void;
+}) {
   const [dragId, setDragId] = useState<number | null>(null);
   const [overListId, setOverListId] = useState<number | null>(null);
   const [newListMode, setNewListMode] = useState(false);
@@ -659,8 +958,23 @@ function BoardView({ lists, todos, t, dateLocale, isLoading, onAddCard, onMoveCa
       {lists.map((list) => {
         const cards = todos.filter((td) => td.listId === list.id);
         const isDragOver = overListId === list.id;
+
         return (
-          <div key={list.id} className={`board-column ${isDragOver ? "drag-over" : ""}`} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }} onDragEnter={() => setOverListId(list.id)} onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOverListId(null); }} onDrop={(e) => { e.preventDefault(); if (dragId !== null) { onMoveCard(dragId, list.id); setDragId(null); setOverListId(null); } }}>
+          <div
+            key={list.id}
+            className={`board-column ${isDragOver ? "drag-over" : ""}`}
+            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+            onDragEnter={() => setOverListId(list.id)}
+            onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOverListId(null); }}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (dragId !== null) {
+                onMoveCard(dragId, list.id);
+                setDragId(null);
+                setOverListId(null);
+              }
+            }}
+          >
             <div className="board-column-header">
               {editListId === list.id ? (
                 <form className="board-edit-form" onSubmit={(e) => { e.preventDefault(); if (editListTitle.trim()) { onUpdateList(list.id, editListTitle.trim()); } setEditListId(null); }}>
@@ -670,7 +984,10 @@ function BoardView({ lists, todos, t, dateLocale, isLoading, onAddCard, onMoveCa
                 </form>
               ) : (
                 <>
-                  <div className="board-column-title"><h3>{list.title}</h3><span className="board-column-count">{cards.length}</span></div>
+                  <div className="board-column-title">
+                    <h3>{list.title}</h3>
+                    <span className="board-column-count">{cards.length}</span>
+                  </div>
                   <div className="board-column-actions">
                     <button type="button" className="icon-btn" onClick={() => { setEditListId(list.id); setEditListTitle(list.title); }} aria-label={t("editList")}><Pencil size={14} /></button>
                     <button type="button" className="icon-btn" onClick={() => onDeleteList(list)} aria-label={t("deleteList")}><Trash2 size={14} /></button>
@@ -678,40 +995,90 @@ function BoardView({ lists, todos, t, dateLocale, isLoading, onAddCard, onMoveCa
                 </>
               )}
             </div>
+
             <div className="board-column-body">
               {cards.map((todo) => (
-                <div key={todo.id} className={`board-card color-${normalizeColor(todo.color)} ${todo.completed ? "is-completed" : ""} ${dragId === todo.id ? "is-dragging" : ""}`} draggable onDragStart={(e) => { setDragId(todo.id); e.dataTransfer.effectAllowed = "move"; }} onDragEnd={() => { setDragId(null); setOverListId(null); }}>
-                  <div className="board-card-color" />
-                  <div className="board-card-top">
-                    <button type="button" className="complete-button" onClick={() => onToggle(todo)} aria-label={todo.completed ? "Pending" : "Completed"}>{todo.completed ? <CheckCircle2 size={16} /> : <Circle size={16} />}</button>
-                    <h4 className={todo.completed ? "is-completed-text" : ""}>{todo.title}</h4>
-                    <GripVertical size={14} className="drag-handle" />
-                  </div>
-                  {todo.note && <p className="board-card-note">{todo.note}</p>}
-                  <div className="board-card-meta">
-                    <span className={`priority-badge ${normalizePriority(todo.priority)}`}><Flag size={11} />{t(normalizePriority(todo.priority))}</span>
-                    <span><Folder size={11} />{t(normalizeCategory(todo.category))}</span>
-                    {todo.dueDate && <span><CalendarDays size={11} />{formatDateHeading(getTodoDueDate(todo), dateLocale, true)}</span>}
-                  </div>
-                  <div className="board-card-actions">
-                    <button type="button" className="icon-btn" onClick={() => onEdit(todo)}><Pencil size={13} /></button>
-                    <button type="button" className="icon-btn" onClick={() => onDelete(todo)}><Trash2 size={13} /></button>
-                    <select className="board-card-move" value={todo.listId ?? ""} onChange={(e) => onMoveCard(todo.id, Number(e.target.value))} aria-label={t("moveTask")}>
-                      {lists.map((l) => <option key={l.id} value={l.id}>{l.title}</option>)}
-                    </select>
+                <div
+                  key={todo.id}
+                  className={`board-card color-${normalizeColor(todo.color)} ${todo.completed ? "is-completed" : ""} ${dragId === todo.id ? "is-dragging" : ""}`}
+                  draggable
+                  onDragStart={(e) => { setDragId(todo.id); e.dataTransfer.effectAllowed = "move"; }}
+                  onDragEnd={() => { setDragId(null); setOverListId(null); }}
+                  onClick={() => onOpenDetail(todo)}
+                >
+                  {/* Card Cover Image if attached */}
+                  {todo.imageUrl && (
+                    <div className="board-card-cover">
+                      <img src={todo.imageUrl} alt="" loading="lazy" />
+                    </div>
+                  )}
+
+                  {/* Vibrant Color Strip */}
+                  <div className={`board-card-color color-${normalizeColor(todo.color)}`} />
+
+                  <div className="board-card-content">
+                    <div className="board-card-top">
+                      <button
+                        type="button"
+                        className="complete-button"
+                        onClick={(e) => { e.stopPropagation(); onToggle(todo); }}
+                        aria-label={todo.completed ? "Pending" : "Completed"}
+                      >
+                        {todo.completed ? <CheckCircle2 size={16} /> : <Circle size={16} />}
+                      </button>
+                      <h4 className={todo.completed ? "is-completed-text" : ""}>{todo.title}</h4>
+                      <GripVertical size={14} className="drag-handle" aria-hidden="true" />
+                    </div>
+
+                    {todo.note && <p className="board-card-note">{todo.note}</p>}
+
+                    <div className="board-card-meta">
+                      <span className={`priority-badge ${normalizePriority(todo.priority)}`}>
+                        <Flag size={11} />
+                        {t(normalizePriority(todo.priority))}
+                      </span>
+                      <span><Folder size={11} />{t(normalizeCategory(todo.category))}</span>
+                      {todo.dueDate && <span><CalendarDays size={11} />{formatDateHeading(getTodoDueDate(todo), dateLocale, true)}</span>}
+                      {Boolean(todo.commentsCount && todo.commentsCount > 0) && (
+                        <span className="comment-badge"><MessageSquare size={11} />{todo.commentsCount}</span>
+                      )}
+                    </div>
+
+                    <div className="board-card-actions" onClick={(e) => e.stopPropagation()}>
+                      <button type="button" className="icon-btn" onClick={() => onEdit(todo)} aria-label="Edit title"><Pencil size={13} /></button>
+                      <button type="button" className="icon-btn" onClick={() => onDelete(todo)} aria-label="Delete"><Trash2 size={13} /></button>
+                      <select
+                        className="board-card-move"
+                        value={todo.listId ?? ""}
+                        onChange={(e) => onMoveCard(todo.id, Number(e.target.value))}
+                        aria-label={t("moveTask")}
+                      >
+                        {lists.map((l) => <option key={l.id} value={l.id}>{l.title}</option>)}
+                      </select>
+                    </div>
                   </div>
                 </div>
               ))}
-              <button type="button" className="board-add-card" onClick={() => onAddCard(list.id)}><Plus size={16} /> {t("addTask")}</button>
+
+              <button type="button" className="board-add-card" onClick={() => onAddCard(list.id)}>
+                <Plus size={16} /> {t("addTask")}
+              </button>
             </div>
           </div>
         );
       })}
 
+      {/* Add New List Column */}
       {newListMode ? (
         <div className="board-new-list card">
           <form onSubmit={(e) => { e.preventDefault(); if (newListTitle.trim()) { onCreateList(newListTitle.trim()); setNewListTitle(""); setNewListMode(false); } }}>
-            <input value={newListTitle} onChange={(e) => setNewListTitle(e.target.value)} placeholder={t("listName")} autoFocus onKeyDown={(e) => { if (e.key === "Escape") { setNewListMode(false); setNewListTitle(""); } }} />
+            <input
+              value={newListTitle}
+              onChange={(e) => setNewListTitle(e.target.value)}
+              placeholder={t("listName")}
+              autoFocus
+              onKeyDown={(e) => { if (e.key === "Escape") { setNewListMode(false); setNewListTitle(""); } }}
+            />
             <div className="board-new-list-btns">
               <button type="submit" className="save-button"><Check size={16} /> {t("add")}</button>
               <button type="button" className="secondary-button" onClick={() => { setNewListMode(false); setNewListTitle(""); }}><X size={16} /></button>
@@ -719,35 +1086,642 @@ function BoardView({ lists, todos, t, dateLocale, isLoading, onAddCard, onMoveCa
           </form>
         </div>
       ) : (
-        <button type="button" className="board-add-list" onClick={() => setNewListMode(true)}><Plus size={20} /> {t("addList")}</button>
+        <button type="button" className="board-add-list" onClick={() => setNewListMode(true)}>
+          <Plus size={20} /> {t("addList")}
+        </button>
       )}
     </section>
   );
 }
 
-/* ---- Shared Sub-Components ---- */
+/* ============================================================ */
+/*  Task Detail Modal (Trello-style Card Details & Comments)     */
+/* ============================================================ */
+
+function TaskDetailModal({
+  todo,
+  lists,
+  t,
+  dateLocale,
+  onClose,
+  onUpdate,
+  onDelete,
+  onMove,
+}: {
+  todo: Todo;
+  lists: BoardList[];
+  t: (key: TranslationKey) => string;
+  dateLocale: string;
+  onClose: () => void;
+  onUpdate: (id: number, updates: Partial<Todo>) => Promise<Todo | null>;
+  onDelete: (todo: Todo) => void;
+  onMove: (todoId: number, listId: number) => void;
+}) {
+  const [title, setTitle] = useState(todo.title);
+  const [note, setNote] = useState(todo.note || "");
+  const [color, setColor] = useState<TaskColor>(normalizeColor(todo.color));
+  const [priority, setPriority] = useState<Priority>(normalizePriority(todo.priority));
+  const [category, setCategory] = useState<Category>(normalizeCategory(todo.category));
+  const [dueDate, setDueDate] = useState(getTodoDueDate(todo));
+  const [dueTime, setDueTime] = useState(todo.dueTime || "09:00");
+  const [imageUrl, setImageUrl] = useState(todo.imageUrl || "");
+  const [comments, setComments] = useState<TodoComment[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [isPostingComment, setIsPostingComment] = useState(false);
+  const [isCommentsLoading, setIsCommentsLoading] = useState(true);
+  const [showImageInput, setShowImageInput] = useState(false);
+  const [imageInputUrl, setImageInputUrl] = useState("");
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch comments for this todo
+  useEffect(() => {
+    let isMounted = true;
+    setIsCommentsLoading(true);
+
+    fetch(`${API_URL}/${todo.id}/comments`)
+      .then((res) => res.json())
+      .then((data: TodoComment[]) => {
+        if (isMounted) {
+          setComments(Array.isArray(data) ? data : []);
+          setIsCommentsLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load comments", err);
+        if (isMounted) setIsCommentsLoading(false);
+      });
+
+    return () => { isMounted = false; };
+  }, [todo.id]);
+
+  // Support Ctrl+V to paste image directly onto the card
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith("image/")) {
+          const file = items[i].getAsFile();
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (uploadEvent) => {
+              const base64Url = uploadEvent.target?.result as string;
+              if (base64Url) {
+                setImageUrl(base64Url);
+                void onUpdate(todo.id, { imageUrl: base64Url });
+              }
+            };
+            reader.readAsDataURL(file);
+          }
+          break;
+        }
+      }
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [onUpdate, todo.id]);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (uploadEvent) => {
+        const base64Url = uploadEvent.target?.result as string;
+        if (base64Url) {
+          setImageUrl(base64Url);
+          void onUpdate(todo.id, { imageUrl: base64Url });
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleApplyImageUrl = () => {
+    if (imageInputUrl.trim()) {
+      setImageUrl(imageInputUrl.trim());
+      void onUpdate(todo.id, { imageUrl: imageInputUrl.trim() });
+      setImageInputUrl("");
+      setShowImageInput(false);
+    }
+  };
+
+  const handleRemoveCover = () => {
+    setImageUrl("");
+    void onUpdate(todo.id, { imageUrl: null });
+  };
+
+  const handleSaveField = (key: keyof Todo, val: unknown) => {
+    void onUpdate(todo.id, { [key]: val });
+  };
+
+  const handlePostComment = async () => {
+    const text = newComment.trim();
+    if (!text || isPostingComment) return;
+
+    setIsPostingComment(true);
+    try {
+      const res = await fetch(`${API_URL}/${todo.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: text, author: "Maya" }),
+      });
+
+      if (res.ok) {
+        const createdComment = (await res.json()) as TodoComment;
+        setComments((prev) => [...prev, createdComment]);
+        setNewComment("");
+      }
+    } catch (err) {
+      console.error("Failed to post comment", err);
+    } finally {
+      setIsPostingComment(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: number) => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/comments/${commentId}`, { method: "DELETE" });
+      if (res.ok) {
+        setComments((prev) => prev.filter((c) => c.id !== commentId));
+      }
+    } catch (err) {
+      console.error("Failed to delete comment", err);
+    }
+  };
+
+
+  return (
+    <div className="modal-layer detail-modal-layer" role="presentation" onMouseDown={onClose}>
+      <article
+        className="modal-card task-detail-card"
+        role="dialog"
+        aria-modal="true"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        {/* Cover Header Banner */}
+        {imageUrl ? (
+          <div className="task-detail-cover">
+            <img src={imageUrl} alt="" />
+            <div className="cover-actions-overlay">
+              <button type="button" className="cover-action-btn" onClick={() => fileInputRef.current?.click()}>
+                <Upload size={14} /> <span>{t("uploadImage")}</span>
+              </button>
+              <button type="button" className="cover-action-btn destructive" onClick={handleRemoveCover}>
+                <Trash2 size={14} /> <span>{t("removeImage")}</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="task-detail-cover-empty">
+            <button type="button" className="cover-add-btn" onClick={() => fileInputRef.current?.click()}>
+              <ImageIcon size={16} /> <span>{t("coverImage")}</span>
+            </button>
+            <button type="button" className="cover-add-btn" onClick={() => setShowImageInput((prev) => !prev)}>
+              <Plus size={16} /> <span>URL</span>
+            </button>
+          </div>
+        )}
+
+        <input
+          type="file"
+          ref={fileInputRef}
+          style={{ display: "none" }}
+          accept="image/*"
+          onChange={handleFileUpload}
+        />
+
+        {showImageInput && (
+          <div className="cover-url-box">
+            <input
+              type="url"
+              placeholder="https://images.unsplash.com/..."
+              value={imageInputUrl}
+              onChange={(e) => setImageInputUrl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleApplyImageUrl(); }}
+            />
+            <button type="button" className="save-button" onClick={handleApplyImageUrl}><Check size={14} /> {t("save")}</button>
+          </div>
+        )}
+
+        {/* Modal Header */}
+        <div className="detail-modal-header">
+          <div className="detail-title-row">
+            <button
+              type="button"
+              className="complete-button detail-complete-btn"
+              onClick={() => {
+                const next = !todo.completed;
+                void onUpdate(todo.id, { completed: next });
+              }}
+            >
+              {todo.completed ? <CheckCircle2 size={24} /> : <Circle size={24} />}
+            </button>
+
+            <input
+              className={`detail-title-input ${todo.completed ? "is-completed-text" : ""}`}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={() => { if (title.trim() && title !== todo.title) handleSaveField("title", title.trim()); }}
+              placeholder={t("title")}
+            />
+
+            <button type="button" className="icon-btn close-modal-btn" onClick={onClose} aria-label={t("close")}>
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="detail-list-badge">
+            <span>{t("inList")}</span>
+            <select
+              value={todo.listId ?? ""}
+              onChange={(e) => onMove(todo.id, Number(e.target.value))}
+            >
+              {lists.map((l) => <option key={l.id} value={l.id}>{l.title}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Detail Content Grid */}
+        <div className="task-detail-grid">
+          {/* Main Left Column: Description & Comments */}
+          <div className="detail-main-col">
+            {/* Description / Notes */}
+            <div className="detail-section">
+              <label className="detail-section-title">
+                <Folder size={16} /> <span>{t("note")}</span>
+              </label>
+              <textarea
+                className="detail-note-input"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                onBlur={() => { if (note !== todo.note) handleSaveField("note", note); }}
+                placeholder={t("notePlaceholder")}
+                rows={3}
+              />
+            </div>
+
+            {/* Comments & Activity Timeline */}
+            <div className="detail-section comments-section">
+              <div className="detail-section-title">
+                <MessageSquare size={16} />
+                <span>{t("comments")}</span>
+                <span className="comments-badge-count">{comments.length}</span>
+              </div>
+
+              {/* Add Comment Box */}
+              <div className="comment-compose-box">
+                <div className="comment-avatar"><User size={18} /></div>
+                <div className="comment-compose-input-wrap">
+                  <textarea
+                    placeholder={t("writeComment")}
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    onKeyDown={(e) => {
+                      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                        void handlePostComment();
+                      }
+                    }}
+                    rows={2}
+                  />
+                  <div className="comment-compose-actions">
+                    <button
+                      type="button"
+                      className="save-button"
+                      disabled={!newComment.trim() || isPostingComment}
+                      onClick={() => void handlePostComment()}
+                    >
+                      <Send size={14} /> <span>{t("postComment")}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Comment History List */}
+              <div className="comments-history-list">
+                {isCommentsLoading ? (
+                  <div className="skeleton-list compact"><span /><span /></div>
+                ) : comments.length === 0 ? (
+                  <p className="no-comments-text">{t("noCommentsYet")}</p>
+                ) : (
+                  comments.map((comment) => (
+                    <div key={comment.id} className="comment-bubble-item">
+                      <div className="comment-avatar"><User size={16} /></div>
+                      <div className="comment-bubble-content">
+                        <div className="comment-bubble-header">
+                          <strong>{comment.author}</strong>
+                          <small>{formatRelativeTime(comment.createdAt, dateLocale)}</small>
+                          <button
+                            type="button"
+                            className="icon-btn delete-comment-btn"
+                            onClick={() => void handleDeleteComment(comment.id)}
+                            aria-label={t("deleteComment")}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                        <p className="comment-bubble-text">{comment.content}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Sidebar Column: Properties */}
+          <aside className="detail-sidebar-col">
+            {/* Priority */}
+            <div className="detail-prop-card">
+              <label><Flag size={14} /> <span>{t("priority")}</span></label>
+              <select
+                value={priority}
+                onChange={(e) => {
+                  const val = e.target.value as Priority;
+                  setPriority(val);
+                  handleSaveField("priority", val);
+                }}
+              >
+                {PRIORITY_OPTIONS.map((item) => <option key={item.value} value={item.value}>{t(item.key)}</option>)}
+              </select>
+            </div>
+
+            {/* Category */}
+            <div className="detail-prop-card">
+              <label><Folder size={14} /> <span>{t("category")}</span></label>
+              <select
+                value={category}
+                onChange={(e) => {
+                  const val = e.target.value as Category;
+                  setCategory(val);
+                  handleSaveField("category", val);
+                }}
+              >
+                {CATEGORY_OPTIONS.map((item) => <option key={item.value} value={item.value}>{t(item.key)}</option>)}
+              </select>
+            </div>
+
+            {/* Due Date & Time */}
+            <div className="detail-prop-card">
+              <label><CalendarDays size={14} /> <span>{t("dueDate")}</span></label>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => {
+                  setDueDate(e.target.value);
+                  handleSaveField("dueDate", e.target.value);
+                }}
+              />
+              <input
+                type="time"
+                value={dueTime}
+                onChange={(e) => {
+                  setDueTime(e.target.value);
+                  handleSaveField("dueTime", e.target.value);
+                }}
+              />
+            </div>
+
+            {/* Vibrant Color Swatches */}
+            <div className="detail-prop-card">
+              <label><Palette size={14} /> <span>{t("color")}</span></label>
+              <div className="detail-color-grid">
+                {COLOR_OPTIONS.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    className={`detail-color-btn color-${item.value} ${color === item.value ? "is-selected" : ""}`}
+                    onClick={() => {
+                      setColor(item.value);
+                      handleSaveField("color", item.value);
+                    }}
+                    style={{ backgroundColor: item.hex }}
+                    aria-label={t(item.key)}
+                  >
+                    {color === item.value && <Check size={14} color="#fff" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="detail-actions-group">
+              <button
+                type="button"
+                className="secondary-button detail-action-btn danger-text"
+                onClick={() => {
+                  onClose();
+                  onDelete(todo);
+                }}
+              >
+                <Trash2 size={16} /> <span>{t("delete")}</span>
+              </button>
+            </div>
+          </aside>
+        </div>
+      </article>
+    </div>
+  );
+}
+
+/* ============================================================ */
+/*  Task Form (Modal Create / Edit)                              */
+/* ============================================================ */
+
+function TaskForm({
+  form,
+  setForm,
+  t,
+  onSubmit,
+  submitLabel,
+  inputRef,
+  onCancel,
+  compact = false,
+  lists,
+}: {
+  form: TaskFormState;
+  setForm: (form: TaskFormState) => void;
+  t: (key: TranslationKey) => string;
+  onSubmit: () => void;
+  submitLabel: string;
+  inputRef?: React.RefObject<HTMLInputElement | null>;
+  onCancel?: () => void;
+  compact?: boolean;
+  lists?: BoardList[];
+}) {
+  const updateField = <Key extends keyof TaskFormState>(key: Key, value: TaskFormState[Key]) => setForm({ ...form, [key]: value });
+  const filePickerRef = useRef<HTMLInputElement>(null);
+
+  const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const base64 = ev.target?.result as string;
+        if (base64) updateField("imageUrl", base64);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  return (
+    <form className={compact ? "task-form compact cardless" : "task-form card"} onSubmit={(event) => { event.preventDefault(); void onSubmit(); }}>
+      {lists && lists.length > 0 && (
+        <label>
+          {t("list")}
+          <select value={form.listId ?? ""} onChange={(event) => updateField("listId", Number(event.target.value) || null)}>
+            {lists.map((l) => <option key={l.id} value={l.id}>{l.title}</option>)}
+          </select>
+        </label>
+      )}
+
+      <div className="form-grid two">
+        <label>
+          {t("title")}
+          <input ref={inputRef} value={form.title} onChange={(event) => updateField("title", event.target.value)} placeholder={t("titlePlaceholder")} autoFocus />
+        </label>
+        <label>
+          {t("category")}
+          <select value={form.category} onChange={(event) => updateField("category", event.target.value as Category)}>
+            {CATEGORY_OPTIONS.map((item) => <option key={item.value} value={item.value}>{t(item.key)}</option>)}
+          </select>
+        </label>
+      </div>
+
+      <label>
+        {t("note")}
+        <textarea value={form.note} onChange={(event) => updateField("note", event.target.value)} placeholder={t("notePlaceholder")} />
+      </label>
+
+      {/* Image Cover Input */}
+      <div className="form-image-attachment">
+        <label>{t("coverImage")}</label>
+        <div className="form-image-row">
+          <input
+            type="url"
+            placeholder="https://..."
+            value={form.imageUrl}
+            onChange={(e) => updateField("imageUrl", e.target.value)}
+          />
+          <button type="button" className="secondary-button" onClick={() => filePickerRef.current?.click()}>
+            <Upload size={14} /> <span>{t("uploadImage")}</span>
+          </button>
+          <input type="file" ref={filePickerRef} style={{ display: "none" }} accept="image/*" onChange={handleImageFile} />
+        </div>
+        {form.imageUrl && (
+          <div className="form-image-preview">
+            <img src={form.imageUrl} alt="preview" />
+            <button type="button" className="remove-preview-btn" onClick={() => updateField("imageUrl", "")}><X size={14} /></button>
+          </div>
+        )}
+      </div>
+
+      <div className="form-grid two">
+        <label>{t("dueDate")}<input type="date" value={form.dueDate} onChange={(event) => updateField("dueDate", event.target.value)} /></label>
+        <label>{t("dueTime")}<input type="time" value={form.dueTime} onChange={(event) => updateField("dueTime", event.target.value)} /></label>
+      </div>
+
+      <div className="form-grid two">
+        <label>
+          {t("priority")}
+          <select value={form.priority} onChange={(event) => updateField("priority", event.target.value as Priority)}>
+            {PRIORITY_OPTIONS.map((item) => <option key={item.value} value={item.value}>{t(item.key)}</option>)}
+          </select>
+        </label>
+        <fieldset className="color-picker">
+          <legend>{t("color")}</legend>
+          <div>
+            {COLOR_OPTIONS.map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                className={form.color === item.value ? `color-swatch ${item.value} is-selected` : `color-swatch ${item.value}`}
+                onClick={() => updateField("color", item.value)}
+                aria-pressed={form.color === item.value}
+              >
+                <span style={{ backgroundColor: item.hex }} />
+                {t(item.key)}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      </div>
+
+      <section className="alarm-box" aria-label={t("reminder")}>
+        <div><strong>{t("reminder")}</strong><span>{t("alarmDate")} / {t("alarmTime")}</span></div>
+        <label className="switch"><input type="checkbox" checked={form.alarmEnabled} onChange={(event) => updateField("alarmEnabled", event.target.checked)} /><span />{t("reminder")}</label>
+        {form.alarmEnabled && (
+          <div className="form-grid two alarm-inputs">
+            <label>{t("alarmDate")}<input type="date" value={form.alarmDate} onChange={(event) => updateField("alarmDate", event.target.value)} /></label>
+            <label>{t("alarmTime")}<input type="time" value={form.alarmTime} onChange={(event) => updateField("alarmTime", event.target.value)} /></label>
+          </div>
+        )}
+      </section>
+
+      <div className="form-actions">
+        {onCancel && <button type="button" className="secondary-button" onClick={onCancel}>{t("cancel")}</button>}
+        <button type="submit" className="save-button"><Check size={18} /> {submitLabel}</button>
+      </div>
+    </form>
+  );
+}
+
+/* ============================================================ */
+/*  Other Views & Shared Subcomponents                           */
+/* ============================================================ */
 
 function CalendarPanel({ days, monthLabel, taskDates, dateLocale, t, onPrevious, onNext, onSelect }: { days: CalendarDay[]; monthLabel: string; taskDates: Set<string>; dateLocale: string; t: (key: TranslationKey) => string; onPrevious: () => void; onNext: () => void; onSelect: (date: Date) => void }) {
   return <section className="calendar-card card"><div className="calendar-header"><div><span className="eyebrow">{t("monthPlanner")}</span><h2>{monthLabel}</h2></div><div className="month-actions"><button type="button" aria-label={t("previousMonth")} onClick={onPrevious}><ChevronLeft size={18} /></button><button type="button" aria-label={t("nextMonth")} onClick={onNext}><ChevronRight size={18} /></button></div></div><div className="weekday-grid" aria-hidden="true">{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <span key={day}>{day}</span>)}</div><div className="calendar-grid">{days.map((day) => <button key={day.key} type="button" className={`${day.isOutside ? "is-outside" : ""} ${day.isToday ? "is-today" : ""} ${day.isSelected ? "is-selected" : ""}`} onClick={() => onSelect(day.date)} aria-label={day.date.toLocaleDateString(dateLocale, { month: "long", day: "numeric", year: "numeric" })}><span>{day.date.getDate()}</span>{taskDates.has(toDateInputValue(day.date)) && <i aria-hidden="true" />}</button>)}</div></section>;
 }
 
-function TaskPreview({ title, todos, t, dateLocale, isLoading, onAdd, onToggle }: { title: string; todos: Todo[]; t: (key: TranslationKey) => string; dateLocale: string; isLoading: boolean; onAdd: () => void; onToggle: (todo: Todo) => void }) {
-  return <section className="card task-preview"><div className="section-title"><div><span className="eyebrow">{t("selectedDay")}</span><h2>{title}</h2></div><button type="button" onClick={onAdd}>{t("add")}</button></div>{isLoading ? <SkeletonList compact /> : todos.length === 0 ? <p className="muted-empty">{t("noTasksDate")}</p> : todos.slice(0, 5).map((todo) => <button key={todo.id} type="button" className={`preview-row color-${normalizeColor(todo.color)}`} onClick={() => onToggle(todo)}>{todo.completed ? <CheckCircle2 size={18} /> : <Circle size={18} />}<span>{todo.title}</span><small>{formatDateHeading(getTodoDueDate(todo), dateLocale, true)}</small></button>)}</section>;
+function TaskPreview({ title, todos, t, dateLocale, isLoading, onAdd, onToggle, onOpenDetail }: { title: string; todos: Todo[]; t: (key: TranslationKey) => string; dateLocale: string; isLoading: boolean; onAdd: () => void; onToggle: (todo: Todo) => void; onOpenDetail: (todo: Todo) => void }) {
+  return <section className="card task-preview"><div className="section-title"><div><span className="eyebrow">{t("selectedDay")}</span><h2>{title}</h2></div><button type="button" onClick={onAdd}>{t("add")}</button></div>{isLoading ? <SkeletonList compact /> : todos.length === 0 ? <p className="muted-empty">{t("noTasksDate")}</p> : todos.slice(0, 5).map((todo) => <button key={todo.id} type="button" className={`preview-row color-${normalizeColor(todo.color)}`} onClick={() => onOpenDetail(todo)}><span onClick={(e) => { e.stopPropagation(); onToggle(todo); }}>{todo.completed ? <CheckCircle2 size={18} /> : <Circle size={18} />}</span><span>{todo.title}</span><small>{formatDateHeading(getTodoDueDate(todo), dateLocale, true)}</small></button>)}</section>;
 }
 
-function TaskCard({ todo, t, dateLocale, lists, onEdit, onToggle, onDelete, onMove }: { todo: Todo; t: (key: TranslationKey) => string; dateLocale: string; lists: BoardList[]; onEdit: () => void; onToggle: () => void; onDelete: () => void; onMove: (todoId: number, listId: number) => void }) {
+function TaskCard({ todo, t, dateLocale, lists, onEdit, onToggle, onDelete, onMove, onOpenDetail }: { todo: Todo; t: (key: TranslationKey) => string; dateLocale: string; lists: BoardList[]; onEdit: () => void; onToggle: () => void; onDelete: () => void; onMove: (todoId: number, listId: number) => void; onOpenDetail: (todo: Todo) => void }) {
   const priority = normalizePriority(todo.priority);
   const category = normalizeCategory(todo.category);
   const color = normalizeColor(todo.color);
   const alarmActive = Boolean(todo.alarmEnabled || todo.alarm);
 
-  return <article className={`task-card color-${color} ${todo.completed ? "is-completed" : ""}`}><button type="button" className="complete-button" onClick={onToggle} aria-label={todo.completed ? t("pending") : t("completed")}>{todo.completed ? <CheckCircle2 size={20} /> : <Circle size={20} />}</button><div className="task-content"><h3>{todo.title}</h3>{todo.note && <p>{todo.note}</p>}<div className="task-meta"><span><Folder size={14} />{t(category)}</span><span className={`priority-badge ${priority}`}><Flag size={14} />{t(priority)}</span><span><CalendarDays size={14} />{formatDateHeading(getTodoDueDate(todo), dateLocale, true)}</span>{todo.dueTime && <span><Clock size={14} />{todo.dueTime}</span>}{alarmActive && <span className="reminder-badge"><Bell size={14} />{formatAlarm(todo.alarmDateTime, dateLocale)}</span>}{lists.length > 0 && <select className="task-move-select" value={todo.listId ?? ""} onChange={(e) => onMove(todo.id, Number(e.target.value))} aria-label={t("moveTask")}>{lists.map((l) => <option key={l.id} value={l.id}>{l.title}</option>)}</select>}</div></div><div className="task-actions"><button type="button" onClick={onEdit} aria-label={t("editTask")}><Pencil size={17} /></button><button type="button" onClick={onDelete} aria-label={t("delete")}><Trash2 size={17} /></button></div></article>;
-}
-
-function TaskForm({ form, setForm, t, onSubmit, submitLabel, inputRef, onCancel, compact = false, lists }: { form: TaskFormState; setForm: (form: TaskFormState) => void; t: (key: TranslationKey) => string; onSubmit: () => void; submitLabel: string; inputRef?: React.RefObject<HTMLInputElement | null>; onCancel?: () => void; compact?: boolean; lists?: BoardList[] }) {
-  const updateField = <Key extends keyof TaskFormState>(key: Key, value: TaskFormState[Key]) => setForm({ ...form, [key]: value });
-
-  return <form className={compact ? "task-form compact cardless" : "task-form card"} onSubmit={(event) => { event.preventDefault(); void onSubmit(); }}>{lists && lists.length > 0 && <label>{t("list")}<select value={form.listId ?? ""} onChange={(event) => updateField("listId", Number(event.target.value) || null)}>{lists.map((l) => <option key={l.id} value={l.id}>{l.title}</option>)}</select></label>}<div className="form-grid two"><label>{t("title")}<input ref={inputRef} value={form.title} onChange={(event) => updateField("title", event.target.value)} placeholder={t("titlePlaceholder")} /></label><label>{t("category")}<select value={form.category} onChange={(event) => updateField("category", event.target.value as Category)}>{CATEGORY_OPTIONS.map((item) => <option key={item.value} value={item.value}>{t(item.key)}</option>)}</select></label></div><label>{t("note")}<textarea value={form.note} onChange={(event) => updateField("note", event.target.value)} placeholder={t("notePlaceholder")} /></label><div className="form-grid two"><label>{t("dueDate")}<input type="date" value={form.dueDate} onChange={(event) => updateField("dueDate", event.target.value)} /></label><label>{t("dueTime")}<input type="time" value={form.dueTime} onChange={(event) => updateField("dueTime", event.target.value)} /></label></div><div className="form-grid two"><label>{t("priority")}<select value={form.priority} onChange={(event) => updateField("priority", event.target.value as Priority)}>{PRIORITY_OPTIONS.map((item) => <option key={item.value} value={item.value}>{t(item.key)}</option>)}</select></label><fieldset className="color-picker"><legend>{t("color")}</legend><div>{COLOR_OPTIONS.map((item) => <button key={item.value} type="button" className={form.color === item.value ? `color-swatch ${item.value} is-selected` : `color-swatch ${item.value}`} onClick={() => updateField("color", item.value)} aria-pressed={form.color === item.value}><span />{t(item.key)}</button>)}</div></fieldset></div><section className="alarm-box" aria-label={t("reminder")}><div><strong>{t("reminder")}</strong><span>{t("alarmDate")} / {t("alarmTime")}</span></div><label className="switch"><input type="checkbox" checked={form.alarmEnabled} onChange={(event) => updateField("alarmEnabled", event.target.checked)} /><span />{t("reminder")}</label>{form.alarmEnabled && <div className="form-grid two alarm-inputs"><label>{t("alarmDate")}<input type="date" value={form.alarmDate} onChange={(event) => updateField("alarmDate", event.target.value)} /></label><label>{t("alarmTime")}<input type="time" value={form.alarmTime} onChange={(event) => updateField("alarmTime", event.target.value)} /></label></div>}</section><div className="form-actions">{onCancel && <button type="button" className="secondary-button" onClick={onCancel}>{t("cancel")}</button>}<button type="submit" className="save-button"><Check size={18} /> {submitLabel}</button></div></form>;
+  return (
+    <article className={`task-card color-${color} ${todo.completed ? "is-completed" : ""}`} onClick={() => onOpenDetail(todo)}>
+      <button type="button" className="complete-button" onClick={(e) => { e.stopPropagation(); onToggle(); }} aria-label={todo.completed ? t("pending") : t("completed")}>
+        {todo.completed ? <CheckCircle2 size={20} /> : <Circle size={20} />}
+      </button>
+      <div className="task-content">
+        <h3>{todo.title}</h3>
+        {todo.note && <p>{todo.note}</p>}
+        <div className="task-meta">
+          <span><Folder size={14} />{t(category)}</span>
+          <span className={`priority-badge ${priority}`}><Flag size={14} />{t(priority)}</span>
+          <span><CalendarDays size={14} />{formatDateHeading(getTodoDueDate(todo), dateLocale, true)}</span>
+          {todo.dueTime && <span><Clock size={14} />{todo.dueTime}</span>}
+          {alarmActive && <span className="reminder-badge"><Bell size={14} />{formatAlarm(todo.alarmDateTime, dateLocale)}</span>}
+          {Boolean(todo.commentsCount && todo.commentsCount > 0) && (
+            <span className="comment-badge"><MessageSquare size={13} />{todo.commentsCount}</span>
+          )}
+          {lists.length > 0 && (
+            <select
+              className="task-move-select"
+              value={todo.listId ?? ""}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => onMove(todo.id, Number(e.target.value))}
+              aria-label={t("moveTask")}
+            >
+              {lists.map((l) => <option key={l.id} value={l.id}>{l.title}</option>)}
+            </select>
+          )}
+        </div>
+      </div>
+      <div className="task-actions" onClick={(e) => e.stopPropagation()}>
+        <button type="button" onClick={onEdit} aria-label={t("editTask")}><Pencil size={17} /></button>
+        <button type="button" onClick={onDelete} aria-label={t("delete")}><Trash2 size={17} /></button>
+      </div>
+    </article>
+  );
 }
 
 function AnalyticsView({ stats, todos, selectedMood, onMoodChange, t }: { stats: ReturnType<typeof buildStats>; todos: Todo[]; selectedMood: Mood; onMoodChange: (mood: Mood) => void; t: (key: TranslationKey) => string }) {
@@ -771,10 +1745,6 @@ function Modal({ title, children, onClose, destructive = false }: { title: strin
 
 function StatCard({ label, value, icon }: { label: string; value: number | string; icon: ReactNode }) {
   return <article className="stat-card card"><div>{icon}</div><strong>{value}</strong><span>{label}</span></article>;
-}
-
-function Badge({ icon, title, active }: { icon: ReactNode; title: string; active: boolean }) {
-  return <div className={active ? "badge-item is-active" : "badge-item"}>{icon}<span>{title}</span></div>;
 }
 
 function EmptyState({ onAdd, t }: { onAdd: () => void; t: (key: TranslationKey) => string }) {
@@ -817,11 +1787,22 @@ function buildCalendarDays(baseDate: Date, selectedDate: string): CalendarDay[] 
 }
 
 function normalizeTodo(todo: Todo): Todo {
-  return { ...todo, color: normalizeColor(todo.color), priority: normalizePriority(todo.priority), category: normalizeCategory(todo.category), dueDate: todo.dueDate ?? todo.created_at?.slice(0, 10) ?? todayKey, dueTime: normalizeTime(todo.dueTime), alarmEnabled: Boolean(todo.alarmEnabled ?? todo.alarm), listId: todo.listId ?? undefined };
+  return {
+    ...todo,
+    color: normalizeColor(todo.color),
+    priority: normalizePriority(todo.priority),
+    category: normalizeCategory(todo.category),
+    dueDate: todo.dueDate ?? todo.created_at?.slice(0, 10) ?? todayKey,
+    dueTime: normalizeTime(todo.dueTime),
+    alarmEnabled: Boolean(todo.alarmEnabled ?? todo.alarm),
+    listId: todo.listId ?? undefined,
+    imageUrl: todo.imageUrl ?? null,
+    commentsCount: Number(todo.commentsCount ?? 0),
+  };
 }
 
 function normalizeColor(value?: string): TaskColor {
-  return COLOR_OPTIONS.some((item) => item.value === value) ? (value as TaskColor) : "green";
+  return COLOR_OPTIONS.some((item) => item.value === value) ? (value as TaskColor) : "blue";
 }
 
 function normalizePriority(value?: string): Priority {
@@ -868,6 +1849,23 @@ function formatAlarm(value: string | null | undefined, locale: string) {
   return date.toLocaleString(locale, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+function formatRelativeTime(dateString: string, locale: string) {
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const diffSec = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffSec < 60) return locale.startsWith("th") ? "เมื่อสักครู่" : "Just now";
+  if (diffSec < 3600) {
+    const mins = Math.floor(diffSec / 60);
+    return locale.startsWith("th") ? `${mins} นาทีที่แล้ว` : `${mins}m ago`;
+  }
+  if (diffSec < 86400) {
+    const hours = Math.floor(diffSec / 3600);
+    return locale.startsWith("th") ? `${hours} ชม. ที่แล้ว` : `${hours}h ago`;
+  }
+  return date.toLocaleDateString(locale, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
 
 function getWeeklyCompleted(todos: Todo[], today: Date) {
   return Array.from({ length: 7 }, (_, index) => {

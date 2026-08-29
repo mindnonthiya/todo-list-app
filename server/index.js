@@ -8,7 +8,8 @@ const app = express();
 const port = Number(process.env.PORT) || 5000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 const pool = new Pool({
   user: process.env.DB_USER,
@@ -58,7 +59,8 @@ const todoSelect = `
     id, title, note, description, completed, color, priority, category,
     due_date AS "dueDate", due_time AS "dueTime",
     alarm_enabled AS "alarmEnabled", alarm_datetime AS "alarmDateTime",
-    list_id AS "listId", position,
+    list_id AS "listId", position, image_url AS "imageUrl",
+    (SELECT COUNT(*) FROM todo_comments WHERE todo_comments.todo_id = todos.id)::int AS "commentsCount",
     created_at, updated_at
   FROM todos
 `;
@@ -81,6 +83,9 @@ const ensureSchema = async () => {
       due_time TIME,
       alarm_enabled BOOLEAN NOT NULL DEFAULT FALSE,
       alarm_datetime TIMESTAMP,
+      list_id INTEGER,
+      position INTEGER NOT NULL DEFAULT 0,
+      image_url TEXT,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
@@ -97,7 +102,10 @@ const ensureSchema = async () => {
       ADD COLUMN IF NOT EXISTS due_date DATE,
       ADD COLUMN IF NOT EXISTS due_time TIME,
       ADD COLUMN IF NOT EXISTS alarm_enabled BOOLEAN NOT NULL DEFAULT FALSE,
-      ADD COLUMN IF NOT EXISTS alarm_datetime TIMESTAMP
+      ADD COLUMN IF NOT EXISTS alarm_datetime TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS list_id INTEGER,
+      ADD COLUMN IF NOT EXISTS position INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS image_url TEXT
   `);
 
   // 3. Create board_lists table
@@ -111,7 +119,18 @@ const ensureSchema = async () => {
     )
   `);
 
-  // 4. Seed default lists when table is empty
+  // 4. Create todo_comments table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS todo_comments (
+      id SERIAL PRIMARY KEY,
+      todo_id INTEGER NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+      author VARCHAR(100) NOT NULL DEFAULT 'Maya',
+      content TEXT NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // 5. Seed default lists when table is empty
   const { rowCount } = await pool.query("SELECT 1 FROM board_lists LIMIT 1");
   if (rowCount === 0) {
     await pool.query(`
@@ -122,13 +141,6 @@ const ensureSchema = async () => {
     `);
   }
 
-  // 5. Add list_id and position to todos
-  await pool.query(`
-    ALTER TABLE todos
-      ADD COLUMN IF NOT EXISTS list_id INTEGER,
-      ADD COLUMN IF NOT EXISTS position INTEGER NOT NULL DEFAULT 0
-  `);
-
   // 6. Assign orphaned todos to the first / last list
   const first = await pool.query("SELECT id FROM board_lists ORDER BY position ASC LIMIT 1");
   const last  = await pool.query("SELECT id FROM board_lists ORDER BY position DESC LIMIT 1");
@@ -138,7 +150,6 @@ const ensureSchema = async () => {
   if (last.rows.length > 0) {
     await pool.query("UPDATE todos SET list_id = $1 WHERE list_id IS NULL AND completed = true", [last.rows[0].id]);
   }
-  // Catch any remaining NULLs
   if (first.rows.length > 0) {
     await pool.query("UPDATE todos SET list_id = $1 WHERE list_id IS NULL", [first.rows[0].id]);
   }
@@ -178,7 +189,6 @@ app.post("/api/lists", async (req, res) => {
   } catch (error) { sendServerError(res, error); }
 });
 
-// ⚠️ /reorder must come before /:id so Express doesn't treat "reorder" as an id
 app.put("/api/lists/reorder", async (req, res) => {
   try {
     const { orderedIds } = req.body;
@@ -243,6 +253,7 @@ app.post("/api/todos", async (req, res) => {
     const dueTime = typeof req.body.dueTime === "string" ? req.body.dueTime : null;
     const alarmEnabled = Boolean(req.body.alarmEnabled ?? req.body.alarm);
     const alarmDateTime = alarmEnabled ? normalizeAlarmDateTime(req.body.alarmDateTime) : null;
+    const imageUrl = typeof req.body.imageUrl === "string" ? req.body.imageUrl : null;
 
     let listId = req.body.listId || null;
     if (!listId) {
@@ -254,13 +265,15 @@ app.post("/api/todos", async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO todos(title, note, description, completed, color, priority, category,
-                         due_date, due_time, alarm_enabled, alarm_datetime, list_id, position)
-       VALUES($1,$2,$3,$4,$5,$6,$7, COALESCE($8::date, CURRENT_DATE), $9,$10,$11,$12,$13)
+                         due_date, due_time, alarm_enabled, alarm_datetime, list_id, position, image_url)
+       VALUES($1,$2,$3,$4,$5,$6,$7, COALESCE($8::date, CURRENT_DATE), $9,$10,$11,$12,$13,$14)
        RETURNING id, title, note, description, completed, color, priority, category,
                  due_date AS "dueDate", due_time AS "dueTime",
                  alarm_enabled AS "alarmEnabled", alarm_datetime AS "alarmDateTime",
-                 list_id AS "listId", position, created_at, updated_at`,
-      [title, note, description, false, color, priority, category, dueDate, dueTime, alarmEnabled, alarmDateTime, listId, maxPos.rows[0].mp + 1]
+                 list_id AS "listId", position, image_url AS "imageUrl",
+                 0 AS "commentsCount",
+                 created_at, updated_at`,
+      [title, note, description, false, color, priority, category, dueDate, dueTime, alarmEnabled, alarmDateTime, listId, maxPos.rows[0].mp + 1, imageUrl]
     );
 
     res.status(201).json(normalizeTodo(result.rows[0]));
@@ -284,9 +297,10 @@ app.put("/api/todos/:id", async (req, res) => {
     const alarmDateTime = req.body.alarmDateTime === undefined ? undefined : normalizeAlarmDateTime(req.body.alarmDateTime);
     const listId   = req.body.listId   === undefined ? undefined : req.body.listId;
     const position = req.body.position === undefined ? undefined : req.body.position;
+    const imageUrl = req.body.imageUrl === undefined ? undefined : req.body.imageUrl;
 
     if (title === "") return res.status(400).json({ message: "Todo title cannot be empty" });
-    if ([title, note, description, completed, color, priority, category, dueDate, dueTime, alarmEnabled, alarmDateTime, listId, position].every((v) => v === undefined)) {
+    if ([title, note, description, completed, color, priority, category, dueDate, dueTime, alarmEnabled, alarmDateTime, listId, position, imageUrl].every((v) => v === undefined)) {
       return res.status(400).json({ message: "Provide at least one field to update" });
     }
 
@@ -297,13 +311,16 @@ app.put("/api/todos/:id", async (req, res) => {
          category=COALESCE($7,category), due_date=COALESCE($8::date,due_date), due_time=COALESCE($9,due_time),
          alarm_enabled=COALESCE($10,alarm_enabled), alarm_datetime=COALESCE($11,alarm_datetime),
          list_id=COALESCE($12,list_id), position=COALESCE($13,position),
+         image_url=CASE WHEN $14::text = '__CLEAR_IMAGE__' THEN NULL WHEN $14 IS NOT NULL THEN $14 ELSE image_url END,
          updated_at=CURRENT_TIMESTAMP
-       WHERE id=$14
+       WHERE id=$15
        RETURNING id, title, note, description, completed, color, priority, category,
                  due_date AS "dueDate", due_time AS "dueTime",
                  alarm_enabled AS "alarmEnabled", alarm_datetime AS "alarmDateTime",
-                 list_id AS "listId", position, created_at, updated_at`,
-      [title, note, description, completed, color, priority, category, dueDate, dueTime, alarmEnabled, alarmDateTime, listId, position, id]
+                 list_id AS "listId", position, image_url AS "imageUrl",
+                 (SELECT COUNT(*) FROM todo_comments WHERE todo_comments.todo_id = todos.id)::int AS "commentsCount",
+                 created_at, updated_at`,
+      [title, note, description, completed, color, priority, category, dueDate, dueTime, alarmEnabled, alarmDateTime, listId, position, imageUrl === null ? '__CLEAR_IMAGE__' : imageUrl, id]
     );
 
     if (result.rowCount === 0) return res.status(404).json({ message: "Todo not found" });
@@ -322,7 +339,9 @@ app.put("/api/todos/:id/move", async (req, res) => {
        RETURNING id, title, note, description, completed, color, priority, category,
                  due_date AS "dueDate", due_time AS "dueTime",
                  alarm_enabled AS "alarmEnabled", alarm_datetime AS "alarmDateTime",
-                 list_id AS "listId", position, created_at, updated_at`,
+                 list_id AS "listId", position, image_url AS "imageUrl",
+                 (SELECT COUNT(*) FROM todo_comments WHERE todo_comments.todo_id = todos.id)::int AS "commentsCount",
+                 created_at, updated_at`,
       [listId, pos ?? maxPos.rows[0].mp + 1, id]
     );
     if (result.rowCount === 0) return res.status(404).json({ message: "Todo not found" });
@@ -336,6 +355,43 @@ app.delete("/api/todos/:id", async (req, res) => {
     const result = await pool.query("DELETE FROM todos WHERE id=$1", [id]);
     if (result.rowCount === 0) return res.status(404).json({ message: "Todo not found" });
     res.json({ message: "Todo deleted" });
+  } catch (error) { sendServerError(res, error); }
+});
+
+/* ---------- Comments ---------- */
+
+app.get("/api/todos/:id/comments", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      "SELECT id, todo_id AS \"todoId\", author, content, created_at AS \"createdAt\" FROM todo_comments WHERE todo_id = $1 ORDER BY created_at ASC, id ASC",
+      [id]
+    );
+    res.json(result.rows);
+  } catch (error) { sendServerError(res, error); }
+});
+
+app.post("/api/todos/:id/comments", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const content = req.body.content?.trim();
+    const author = req.body.author?.trim() || "Maya";
+    if (!content) return res.status(400).json({ message: "Comment content is required" });
+
+    const result = await pool.query(
+      "INSERT INTO todo_comments(todo_id, author, content) VALUES ($1, $2, $3) RETURNING id, todo_id AS \"todoId\", author, content, created_at AS \"createdAt\"",
+      [id, author, content]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) { sendServerError(res, error); }
+});
+
+app.delete("/api/comments/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query("DELETE FROM todo_comments WHERE id=$1", [id]);
+    if (result.rowCount === 0) return res.status(404).json({ message: "Comment not found" });
+    res.json({ message: "Comment deleted" });
   } catch (error) { sendServerError(res, error); }
 });
 
