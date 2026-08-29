@@ -1,5 +1,6 @@
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
   BarChart3,
   Bell,
   Calendar,
@@ -11,6 +12,8 @@ import {
   ChevronRight,
   Circle,
   Clock,
+  Database,
+  Download,
   Edit2,
   Flame,
   Folder,
@@ -22,16 +25,20 @@ import {
   Menu,
   MessageSquare,
   Moon,
-  MoreHorizontal,
   Palette,
   Paperclip,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
+  Settings,
+  Sparkles,
   Sun,
   Trash2,
+  TrendingUp,
   Upload,
   User,
+  Volume2,
   X,
 } from "lucide-react";
 import { type TranslationKey } from "../contexts/language-core";
@@ -40,14 +47,15 @@ import { useTheme } from "../hooks/useTheme";
 import "./TodoList.css";
 
 type Filter = "all" | "active" | "completed";
-type PlannerView = "board" | "calendar" | "tasks" | "progress";
+type PlannerView = "board" | "calendar" | "tasks" | "progress" | "settings";
 type CalendarViewMode = "month" | "week" | "day" | "agenda";
 type TaskColor = "green" | "blue" | "yellow" | "orange" | "purple" | "red";
+type AccentColor = "red" | "blue" | "purple" | "green" | "orange";
 type Priority = "normal" | "important" | "urgent";
 type Category = "work" | "study" | "personal" | "health" | "other";
 type SortMode = "newest" | "oldest" | "completed" | "priority";
 type Mood = "happy" | "calm" | "tired" | "motivated";
-type DialogMode = "edit" | "delete" | "deleteList" | "create" | "createBoard" | null;
+type DialogMode = "edit" | "delete" | "deleteList" | "create" | "createBoard" | "clearCompleted" | "resetWorkspace" | null;
 
 interface Board {
   id: number;
@@ -135,6 +143,14 @@ const COLOR_OPTIONS: Array<{ value: TaskColor; key: "green" | "blue" | "yellow" 
   { value: "purple", key: "purple", hex: "#8b5cf6" },
 ];
 
+const ACCENT_COLOR_OPTIONS: Array<{ value: AccentColor; label: string; hex: string; strong: string; soft: string }> = [
+  { value: "red", label: "Crimson Red", hex: "#ef4444", strong: "#dc2626", soft: "rgba(239, 68, 68, 0.2)" },
+  { value: "blue", label: "Ocean Blue", hex: "#3b82f6", strong: "#2563eb", soft: "rgba(59, 130, 246, 0.2)" },
+  { value: "purple", label: "Royal Purple", hex: "#8b5cf6", strong: "#7c3aed", soft: "rgba(139, 92, 246, 0.2)" },
+  { value: "green", label: "Emerald Green", hex: "#10b981", strong: "#059669", soft: "rgba(16, 185, 129, 0.2)" },
+  { value: "orange", label: "Sunset Orange", hex: "#f97316", strong: "#ea580c", soft: "rgba(249, 115, 22, 0.2)" },
+];
+
 const PRIORITY_OPTIONS: Array<{ value: Priority; key: "normal" | "important" | "urgent" }> = [
   { value: "normal", key: "normal" },
   { value: "important", key: "important" },
@@ -175,6 +191,32 @@ const createDefaultFormState = (boardId: number | null = null, listId: number | 
   images: [],
 });
 
+/* Web Audio API Chime Sound on completion */
+function playCompletionSound() {
+  try {
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1); // A5
+
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.24);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    osc.stop(ctx.currentTime + 0.25);
+  } catch (err) {
+    console.error("Audio error", err);
+  }
+}
+
 /* ============================================================ */
 /*  Main Component                                               */
 /* ============================================================ */
@@ -182,6 +224,12 @@ const createDefaultFormState = (boardId: number | null = null, listId: number | 
 export default function TodoList() {
   const { t, language, setLanguage } = useLanguage();
   const { theme, toggleTheme } = useTheme();
+
+  // User & Settings state
+  const [userName, setUserName] = useState(() => localStorage.getItem("todo-user-name") || "Nonthiya (mj.)");
+  const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem("todo-sound-enabled") !== "false");
+  const [accentColor, setAccentColor] = useState<AccentColor>(() => (localStorage.getItem("todo-accent-color") as AccentColor) || "red");
+  const [firstDayOfWeek, setFirstDayOfWeek] = useState<"sun" | "mon">(() => (localStorage.getItem("todo-first-day") as "sun" | "mon") || "sun");
 
   // Multi-Board States
   const [boards, setBoards] = useState<Board[]>([]);
@@ -209,15 +257,25 @@ export default function TodoList() {
   const [detailTodo, setDetailTodo] = useState<Todo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [desktopMenuOpen, setDesktopMenuOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [settingsSaveMsg, setSettingsSaveMsg] = useState("");
 
   const inputRef = useRef<HTMLInputElement>(null);
   const boardDropdownRef = useRef<HTMLDivElement>(null);
-  const moreMenuRef = useRef<HTMLDivElement>(null);
+  const desktopMenuRef = useRef<HTMLDivElement>(null);
   const mobileDrawerRef = useRef<HTMLDivElement>(null);
 
   const dateLocale = language === "th" ? "th-TH" : "en-US";
+
+  // Apply accent color to document CSS variables
+  useEffect(() => {
+    const found = ACCENT_COLOR_OPTIONS.find((c) => c.value === accentColor) || ACCENT_COLOR_OPTIONS[0];
+    document.documentElement.style.setProperty("--primary", found.hex);
+    document.documentElement.style.setProperty("--primary-strong", found.strong);
+    document.documentElement.style.setProperty("--primary-soft", found.soft);
+    localStorage.setItem("todo-accent-color", accentColor);
+  }, [accentColor]);
 
   /* ---- Fetch Boards ---- */
 
@@ -280,14 +338,14 @@ export default function TodoList() {
       if (boardDropdownOpen && !boardDropdownRef.current?.contains(target)) {
         setBoardDropdownOpen(false);
       }
-      if (moreMenuOpen && !moreMenuRef.current?.contains(target)) {
-        setMoreMenuOpen(false);
+      if (desktopMenuOpen && !desktopMenuRef.current?.contains(target)) {
+        setDesktopMenuOpen(false);
       }
     };
 
     window.addEventListener("pointerdown", handlePointerDown);
     return () => window.removeEventListener("pointerdown", handlePointerDown);
-  }, [boardDropdownOpen, moreMenuOpen]);
+  }, [boardDropdownOpen, desktopMenuOpen]);
 
   /* ---- Derived data ---- */
 
@@ -297,7 +355,7 @@ export default function TodoList() {
 
   const today = useMemo(() => new Date(), []);
   const stats = useMemo(() => buildStats(todos, today), [today, todos]);
-  const calendarDays = useMemo(() => buildCalendarDays(currentDate, selectedDate), [currentDate, selectedDate]);
+  const calendarDays = useMemo(() => buildCalendarDays(currentDate, selectedDate, firstDayOfWeek), [currentDate, selectedDate, firstDayOfWeek]);
 
   const visibleTodos = useMemo(() => {
     const normalizedQuery = search.trim().toLowerCase();
@@ -322,6 +380,7 @@ export default function TodoList() {
     calendar: t("calendar"),
     tasks: t("tasks"),
     progress: t("analytics"),
+    settings: t("settings"),
   }), [t]);
 
   /* ---- CRUD: Boards ---- */
@@ -398,6 +457,11 @@ export default function TodoList() {
   const updateTodo = useCallback(async (id: number, updates: Partial<Todo>) => {
     setError("");
 
+    // Trigger sound FX if task was toggled to completed
+    if (updates.completed === true && soundEnabled) {
+      playCompletionSound();
+    }
+
     try {
       const res = await fetch(`${API_BASE}/todos/${id}`, {
         method: "PUT",
@@ -417,7 +481,7 @@ export default function TodoList() {
       setError(t("updateError"));
       return null;
     }
-  }, [detailTodo, t]);
+  }, [detailTodo, soundEnabled, t]);
 
   const deleteTodo = useCallback(async () => {
     if (!deletingTodo) return;
@@ -522,6 +586,70 @@ export default function TodoList() {
       console.error(fetchError);
     }
   }, [activeBoardId, deletingList, fetchListsAndTodos]);
+
+  /* ---- Clear Done & Reset ---- */
+
+  const handleClearCompletedTasks = async () => {
+    const completedIds = todos.filter((t) => t.completed).map((t) => t.id);
+    for (const id of completedIds) {
+      try {
+        await fetch(`${API_BASE}/todos/${id}`, { method: "DELETE" });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    setTodos((prev) => prev.filter((t) => !t.completed));
+    setDialogMode(null);
+    setSettingsSaveMsg("ล้างงานที่ทำเสร็จแล้วเรียบร้อย!");
+    setTimeout(() => setSettingsSaveMsg(""), 3000);
+  };
+
+  const handleExportBackup = () => {
+    const backupData = {
+      exportedAt: new Date().toISOString(),
+      version: "2.5.0",
+      boards,
+      lists,
+      todos,
+    };
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `todo-planner-backup-${todayKey}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const content = ev.target?.result as string;
+        const parsed = JSON.parse(content);
+        if (Array.isArray(parsed.todos)) {
+          // Import todos
+          for (const todoItem of parsed.todos) {
+            await fetch(`${API_BASE}/todos`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...todoItem, id: undefined }),
+            });
+          }
+          if (activeBoardId) void fetchListsAndTodos(activeBoardId);
+          setSettingsSaveMsg("นำเข้าข้อมูลสำเร็จแล้ว!");
+          setTimeout(() => setSettingsSaveMsg(""), 3000);
+        }
+      } catch (err) {
+        console.error("Import error", err);
+        setError("ไฟล์ข้อมูลไม่ถูกต้อง");
+      }
+    };
+    reader.readAsText(file);
+  };
 
   /* ---- Modal / Action Handlers ---- */
 
@@ -659,7 +787,7 @@ export default function TodoList() {
           {/* Trello-Style Clean Multi-Board Topbar */}
           <header className="topbar trello-topbar">
             <div className="topbar-left-group">
-              {/* Board Selector Dropdown (Like Trello topbar) */}
+              {/* Board Selector Dropdown */}
               <div className="topbar-board-switcher" ref={boardDropdownRef}>
                 <button
                   type="button"
@@ -708,7 +836,7 @@ export default function TodoList() {
                 )}
               </div>
 
-              {/* "+ สร้างบอร์ดใหม่" Button right next to Board selector */}
+              {/* "+ สร้างบอร์ดใหม่" Button */}
               <button
                 type="button"
                 className="topbar-create-board-btn"
@@ -751,29 +879,42 @@ export default function TodoList() {
                 <LanguageToggle language={language} onChange={setLanguage} />
               </div>
 
-              {/* Desktop User Profile Badge (Clean info, no unnecessary menu) */}
+              {/* Desktop User Profile Badge */}
               <div className="user-profile-badge desktop-only-btn">
                 <User size={14} className="user-badge-icon" />
-                <span>Nonthiya (mj.)</span>
+                <span>{userName}</span>
               </div>
 
-              {/* Desktop More Menu */}
-              <div className="more-menu-container desktop-only-btn" ref={moreMenuRef}>
+              {/* Desktop Hamburger Menu (☰) -> Changed from 3 dots, includes Refresh & Settings */}
+              <div className="more-menu-container desktop-only-btn" ref={desktopMenuRef}>
                 <button
                   type="button"
-                  className="icon-btn more-btn"
-                  onClick={() => setMoreMenuOpen((prev) => !prev)}
-                  aria-label="More options"
+                  className="icon-btn topbar-hamburger-btn"
+                  onClick={() => setDesktopMenuOpen((prev) => !prev)}
+                  aria-label="Menu"
+                  title="Menu"
                 >
-                  <MoreHorizontal size={17} />
+                  <Menu size={18} />
                 </button>
-                {moreMenuOpen && (
+                {desktopMenuOpen && (
                   <div className="more-dropdown-menu">
-                    <button type="button" onClick={() => { if (activeBoardId) void fetchListsAndTodos(activeBoardId); setMoreMenuOpen(false); }}>
-                      <CheckCircle2 size={15} /> <span>รีเฟรชข้อมูล</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeBoardId) void fetchListsAndTodos(activeBoardId);
+                        setDesktopMenuOpen(false);
+                      }}
+                    >
+                      <RefreshCw size={15} /> <span>รีเฟรชข้อมูล</span>
                     </button>
-                    <button type="button" onClick={() => { setActiveView("progress"); setMoreMenuOpen(false); }}>
-                      <BarChart3 size={15} /> <span>{t("analytics")}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveView("settings");
+                        setDesktopMenuOpen(false);
+                      }}
+                    >
+                      <Settings size={15} /> <span>{t("settings")}</span>
                     </button>
                   </div>
                 )}
@@ -791,7 +932,7 @@ export default function TodoList() {
             </div>
           </header>
 
-          {/* Mobile Drawer (Hamburger Menu Sheet) */}
+          {/* Mobile Drawer (Hamburger Menu Sheet with Settings) */}
           {mobileDrawerOpen && (
             <div className="mobile-drawer-layer" onClick={() => setMobileDrawerOpen(false)}>
               <aside className="mobile-drawer" ref={mobileDrawerRef} onClick={(e) => e.stopPropagation()}>
@@ -799,7 +940,7 @@ export default function TodoList() {
                   <div className="drawer-user-info">
                     <div className="drawer-avatar"><User size={18} /></div>
                     <div>
-                      <strong>Nonthiya (mj.)</strong>
+                      <strong>{userName}</strong>
                       <small>{currentBoard.title}</small>
                     </div>
                   </div>
@@ -825,6 +966,14 @@ export default function TodoList() {
                     <LanguageToggle language={language} onChange={setLanguage} />
                   </div>
 
+                  {/* Settings Item in Mobile Drawer */}
+                  <div className="drawer-item" onClick={() => { setActiveView("settings"); setMobileDrawerOpen(false); }}>
+                    <div className="drawer-item-left">
+                      <Settings size={17} />
+                      <span>{t("settings")}</span>
+                    </div>
+                  </div>
+
                   {/* Switch to Analytics */}
                   <div className="drawer-item" onClick={() => { setActiveView("progress"); setMobileDrawerOpen(false); }}>
                     <div className="drawer-item-left">
@@ -836,7 +985,7 @@ export default function TodoList() {
                   {/* Refresh Board */}
                   <div className="drawer-item" onClick={() => { if (activeBoardId) void fetchListsAndTodos(activeBoardId); setMobileDrawerOpen(false); }}>
                     <div className="drawer-item-left">
-                      <CheckCircle2 size={17} />
+                      <RefreshCw size={17} />
                       <span>รีเฟรชบอร์ด</span>
                     </div>
                   </div>
@@ -867,7 +1016,7 @@ export default function TodoList() {
             />
           )}
 
-          {/* Calendar View (100% Functional Multi-View: Month, Week, Day, Agenda) */}
+          {/* Calendar View */}
           {activeView === "calendar" && (
             <CalendarPlannerView
               boardTitle={currentBoard.title}
@@ -928,17 +1077,56 @@ export default function TodoList() {
             </section>
           )}
 
-          {/* Analytics View */}
+          {/* Redesigned Analytics Dashboard */}
           {activeView === "progress" && (
-            <AnalyticsView stats={stats} todos={todos} selectedMood={selectedMood} onMoodChange={setSelectedMood} t={t} />
+            <AnalyticsDashboardView
+              stats={stats}
+              todos={todos}
+              selectedMood={selectedMood}
+              onMoodChange={setSelectedMood}
+              t={t}
+              onOpenDetail={openDetailModal}
+            />
+          )}
+
+          {/* Full-Featured Settings Page */}
+          {activeView === "settings" && (
+            <SettingsView
+              userName={userName}
+              onUserNameChange={(val) => {
+                setUserName(val);
+                localStorage.setItem("todo-user-name", val);
+              }}
+              soundEnabled={soundEnabled}
+              onSoundToggle={(enabled) => {
+                setSoundEnabled(enabled);
+                localStorage.setItem("todo-sound-enabled", String(enabled));
+              }}
+              accentColor={accentColor}
+              onAccentChange={setAccentColor}
+              firstDayOfWeek={firstDayOfWeek}
+              onFirstDayChange={(val) => {
+                setFirstDayOfWeek(val);
+                localStorage.setItem("todo-first-day", val);
+              }}
+              boards={boards}
+              activeBoardId={activeBoardId}
+              onSelectDefaultBoard={(id) => setActiveBoardId(id)}
+              onClearCompletedRequest={() => setDialogMode("clearCompleted")}
+              onResetWorkspaceRequest={() => setDialogMode("resetWorkspace")}
+              onExportBackup={handleExportBackup}
+              onImportBackup={handleImportBackup}
+              saveMsg={settingsSaveMsg}
+              t={t}
+            />
           )}
         </section>
       </div>
 
-      {/* Mobile Bottom Navigation Bar (Always Visible & Pinned) */}
+      {/* Mobile Bottom Navigation Bar */}
       <Navigation activeView={activeView} labels={viewLabels} onChange={setActiveView} variant="bottom" onCreateClick={() => openCreateDialog()} />
 
-      {/* Task Detail Modal (Trello Wide Card Details with Real-time Images & Comments) */}
+      {/* Task Detail Modal */}
       {detailTodo && (
         <TaskDetailModal
           todo={detailTodo}
@@ -1028,6 +1216,41 @@ export default function TodoList() {
           </div>
         </Modal>
       )}
+
+      {/* Clear Completed Tasks Confirmation */}
+      {dialogMode === "clearCompleted" && (
+        <Modal title={t("clearCompleted")} onClose={closeDialog} destructive>
+          <div className="delete-confirmation">
+            <p>{t("clearCompletedWarning")}</p>
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={closeDialog}>{t("cancel")}</button>
+              <button type="button" className="danger-button" onClick={() => void handleClearCompletedTasks()}>{t("delete")}</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Reset Workspace Confirmation */}
+      {dialogMode === "resetWorkspace" && (
+        <Modal title={t("resetWorkspace")} onClose={closeDialog} destructive>
+          <div className="delete-confirmation">
+            <p>{t("resetWorkspaceWarning")}</p>
+            <div className="modal-actions">
+              <button type="button" className="secondary-button" onClick={closeDialog}>{t("cancel")}</button>
+              <button
+                type="button"
+                className="danger-button"
+                onClick={async () => {
+                  localStorage.clear();
+                  window.location.reload();
+                }}
+              >
+                {t("delete")}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </main>
   );
 }
@@ -1046,6 +1269,7 @@ function Navigation({ activeView, labels, onChange, variant, onCreateClick }: { 
     { view: "calendar", icon: <CalendarDays size={19} /> },
     { view: "tasks", icon: <ListTodo size={19} /> },
     { view: "progress", icon: <BarChart3 size={19} /> },
+    { view: "settings", icon: <Settings size={19} /> },
   ];
 
   if (variant === "bottom") {
@@ -1069,9 +1293,9 @@ function Navigation({ activeView, labels, onChange, variant, onCreateClick }: { 
           <ListTodo size={17} />
           <span>{labels.tasks}</span>
         </button>
-        <button type="button" className={activeView === "progress" ? "is-active" : ""} onClick={() => onChange("progress")}>
-          <BarChart3 size={17} />
-          <span>{labels.progress}</span>
+        <button type="button" className={activeView === "settings" ? "is-active" : ""} onClick={() => onChange("settings")}>
+          <Settings size={17} />
+          <span>{labels.settings}</span>
         </button>
       </nav>
     );
@@ -1258,7 +1482,7 @@ function BoardView({
                   onTouchEnd={handleTouchEnd}
                   onClick={() => onOpenDetail(todo)}
                 >
-                  {/* Compact Card Cover Thumbnail if attached */}
+                  {/* Compact Card Cover Thumbnail */}
                   {todo.imageUrl && (
                     <div className="board-card-cover">
                       <img src={todo.imageUrl} alt="" loading="lazy" />
@@ -1494,7 +1718,7 @@ function CalendarPlannerView({
 
   return (
     <section className="calendar-planner-wrapper" aria-label="Calendar Planner">
-      {/* Top Toolbar Matching Screenshot 2 */}
+      {/* Top Toolbar */}
       <div className="cal-planner-topbar">
         <div className="cal-topbar-left">
           {/* Month / Period Picker Button */}
@@ -1531,7 +1755,7 @@ function CalendarPlannerView({
             </button>
           </div>
 
-          {/* View Mode Dropdown: Day, Week, Month, Agenda */}
+          {/* View Mode Dropdown */}
           <div className="cal-view-selector-wrap">
             <button type="button" className="cal-view-btn" onClick={onToggleViewMenu} aria-label="Change View">
               <CalendarDays size={14} />
@@ -1573,7 +1797,7 @@ function CalendarPlannerView({
       </div>
 
       {/* ============================================================ */}
-      {/* 1. MONTH VIEW                                                */}
+      {/* 1. MONTH VIEW (100% Equal Size Grid with Task Dots)           */}
       {/* ============================================================ */}
       {viewMode === "month" && (
         <div className="cal-planner-layout">
@@ -1601,7 +1825,7 @@ function CalendarPlannerView({
                       {dayTasks.length > 0 && <span className="cal-day-task-count">{dayTasks.length}</span>}
                     </div>
 
-                    {/* Task color dots (mobile & compact view, uniform square cells) */}
+                    {/* Task color dots (Mobile & compact view) */}
                     {dayTasks.length > 0 && (
                       <div className="cal-task-dots-row">
                         {dayTasks.slice(0, 4).map((td) => (
@@ -1874,6 +2098,576 @@ function CalendarPlannerView({
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+/* ============================================================ */
+/*  Redesigned Analytics Dashboard View                          */
+/* ============================================================ */
+
+function AnalyticsDashboardView({
+  stats,
+  todos,
+  selectedMood,
+  onMoodChange,
+  t,
+  onOpenDetail,
+}: {
+  stats: ReturnType<typeof buildStats>;
+  todos: Todo[];
+  selectedMood: Mood;
+  onMoodChange: (mood: Mood) => void;
+  t: (key: TranslationKey) => string;
+  onOpenDetail: (todo: Todo) => void;
+}) {
+  // Compute Tier Badge
+  const tierInfo = useMemo(() => {
+    if (stats.progress >= 90) return { title: "Master Achiever 👑", desc: "ยอดเยี่ยม ไร้ที่ติ ทำงานสำเร็จเกือบครบทั้งหมด", color: "tier-gold" };
+    if (stats.progress >= 75) return { title: "Productive Pro 🔥", desc: "กำลังติดสปีด เคลียร์งานได้อย่างมีประสิทธิภาพ", color: "tier-fire" };
+    if (stats.progress >= 50) return { title: "Steady Mover ⚡", desc: "ทำงานต่อเนื่อง เดินหน้าไปได้ด้วยดี", color: "tier-blue" };
+    return { title: "Getting Started 🚀", desc: "เริ่มต้นลุยงาน ก้าวแรกสู่ความสำเร็จ", color: "tier-green" };
+  }, [stats.progress]);
+
+  // Activity Heatmap 30 Days
+  const heatmapDays = useMemo(() => {
+    const today = new Date();
+    return Array.from({ length: 30 }, (_, index) => {
+      const date = new Date(today);
+      date.setDate(today.getDate() - (29 - index));
+      const key = toDateInputValue(date);
+      const count = todos.filter((todo) => todo.completed && (todo.updated_at?.slice(0, 10) ?? getTodoDueDate(todo)) === key).length;
+      let level = 0;
+      if (count === 1) level = 1;
+      else if (count >= 2 && count <= 3) level = 2;
+      else if (count >= 4) level = 3;
+
+      return { key, date, count, level, label: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }) };
+    });
+  }, [todos]);
+
+  // Urgent Watchlist (Due today or overdue)
+  const urgentTasks = useMemo(() => {
+    return todos.filter((t) => !t.completed && (getTodoDueDate(t) <= todayKey || t.priority === "urgent")).slice(0, 4);
+  }, [todos]);
+
+  // Category breakdown
+  const categoryCounts = useMemo(() => {
+    const counts: Record<Category, number> = { work: 0, study: 0, personal: 0, health: 0, other: 0 };
+    for (const td of todos) {
+      const cat = normalizeCategory(td.category);
+      counts[cat] = (counts[cat] || 0) + 1;
+    }
+    return counts;
+  }, [todos]);
+
+  // Best productive day
+  const bestDay = useMemo(() => {
+    if (!stats.weeklyCompleted || stats.weeklyCompleted.length === 0) return null;
+    let max = stats.weeklyCompleted[0];
+    for (const item of stats.weeklyCompleted) {
+      if (item.count > max.count) max = item;
+    }
+    return max.count > 0 ? max.label : null;
+  }, [stats.weeklyCompleted]);
+
+  return (
+    <section className="analytics-dashboard-view" aria-label={t("analytics")}>
+      {/* 1. Hero Productivity Score Card */}
+      <div className="analytics-hero-banner card">
+        <div className="hero-score-info">
+          <div className="hero-score-badge">
+            <Sparkles size={15} />
+            <span>{tierInfo.title}</span>
+          </div>
+          <h2>{stats.progress}% {t("productivityScore")}</h2>
+          <p>{tierInfo.desc}</p>
+
+          <div className="hero-mini-stat-pills">
+            <span><strong>{stats.completed}</strong> {t("tasksCompleted")}</span>
+            <span>•</span>
+            <span><strong>{stats.pending}</strong> {t("pendingTasks")}</span>
+            <span>•</span>
+            <span><strong>{stats.total}</strong> {t("totalTasks")}</span>
+          </div>
+        </div>
+
+        <div className="hero-progress-ring-wrap">
+          <div className="progress-ring-lg" style={{ "--progress": `${stats.progress}%` } as CSSProperties}>
+            <div className="progress-ring-inner">
+              <strong>{stats.progress}%</strong>
+              <small>{t("completion")}</small>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. 4 Quick Stat Metric Cards */}
+      <div className="analytics-metrics-grid">
+        <div className="metric-card card done-card">
+          <div className="metric-icon-wrap done"><CheckCircle2 size={20} /></div>
+          <div>
+            <strong>{stats.completed}</strong>
+            <span>{t("completed")}</span>
+          </div>
+        </div>
+
+        <div className="metric-card card in-progress-card">
+          <div className="metric-icon-wrap in-progress"><Clock size={20} /></div>
+          <div>
+            <strong>{todos.filter((t) => !t.completed && t.position !== 0).length}</strong>
+            <span>{t("inProgressTasks")}</span>
+          </div>
+        </div>
+
+        <div className="metric-card card todo-card">
+          <div className="metric-icon-wrap todo"><ListTodo size={20} /></div>
+          <div>
+            <strong>{stats.pending}</strong>
+            <span>{t("toDoTasks")}</span>
+          </div>
+        </div>
+
+        <div className="metric-card card overdue-card">
+          <div className="metric-icon-wrap overdue"><AlertTriangle size={20} /></div>
+          <div>
+            <strong>{stats.overdue}</strong>
+            <span>{t("overdueTasks")}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. 30-Day Activity Heatmap */}
+      <div className="card heatmap-container-card">
+        <div className="heatmap-card-header">
+          <div>
+            <span className="eyebrow">{t("activity")}</span>
+            <h3>{t("activityHeatmap")}</h3>
+          </div>
+          <div className="heatmap-legend">
+            <span>{t("less")}</span>
+            <i className="lvl-0" />
+            <i className="lvl-1" />
+            <i className="lvl-2" />
+            <i className="lvl-3" />
+            <span>{t("more")}</span>
+          </div>
+        </div>
+
+        <div className="heatmap-grid">
+          {heatmapDays.map((d) => (
+            <div
+              key={d.key}
+              className={`heatmap-cell lvl-${d.level}`}
+              title={`${d.label}: ${d.count} tasks completed`}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* 4. Weekly Velocity & Habit Streak 2-Col */}
+      <div className="analytics-2col-layout">
+        {/* Weekly Velocity Bar Chart */}
+        <div className="card velocity-chart-card">
+          <div className="velocity-header">
+            <div>
+              <span className="eyebrow">{t("weeklyChart")}</span>
+              <h3>{t("tasksCompleted")}</h3>
+            </div>
+            {bestDay && (
+              <span className="best-day-badge">
+                <TrendingUp size={12} /> {t("mostProductiveDay")}: <strong>{bestDay}</strong>
+              </span>
+            )}
+          </div>
+
+          <div className="weekly-chart">
+            {stats.weeklyCompleted.map((item) => {
+              const maxVal = Math.max(...stats.weeklyCompleted.map((i) => i.count), 1);
+              return (
+                <div key={item.label} className="velocity-col">
+                  <span style={{ height: `${Math.max((item.count / maxVal) * 100, 8)}%` }} />
+                  <small>{item.label}</small>
+                  <strong>{item.count}</strong>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Streak & Consistency Card */}
+        <div className="card streak-card">
+          <span className="eyebrow">{t("productivity")}</span>
+          <h3>{t("currentStreak")}</h3>
+
+          <div className="streak-hero-number">
+            <Flame size={32} className="streak-flame" />
+            <div>
+              <strong>{stats.streak}</strong>
+              <span>วันต่อเนื่อง 🔥</span>
+            </div>
+          </div>
+
+          <div className="streak-meta-rows">
+            <div className="streak-meta-item">
+              <span>{t("longestStreak")}</span>
+              <strong>{stats.longestStreak} วัน</strong>
+            </div>
+            <div className="streak-meta-item">
+              <span>{t("tasksThisWeek")}</span>
+              <strong>{stats.completedThisWeek} งาน</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 5. Category Breakdown & Urgent Watchlist */}
+      <div className="analytics-2col-layout">
+        {/* Category Breakdown */}
+        <div className="card category-breakdown-card">
+          <div className="section-title-wrap">
+            <Folder size={16} /> <h3>{t("category")}</h3>
+          </div>
+
+          <div className="category-bars-stream">
+            {CATEGORY_OPTIONS.map((cat) => {
+              const count = categoryCounts[cat.value] || 0;
+              const pct = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
+              return (
+                <div key={cat.value} className="category-bar-row">
+                  <div className="cat-bar-header">
+                    <span>{t(cat.key)}</span>
+                    <strong>{count} ({pct}%)</strong>
+                  </div>
+                  <div className="cat-bar-track">
+                    <i className={`cat-fill-${cat.value}`} style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Urgent & Attention Watchlist */}
+        <div className="card urgent-watchlist-card">
+          <div className="section-title-wrap">
+            <AlertTriangle size={16} /> <h3>{t("urgentWatchlist")}</h3>
+          </div>
+
+          <div className="urgent-stream">
+            {urgentTasks.length === 0 ? (
+              <p className="no-urgent-text">{t("noUrgentTasks")}</p>
+            ) : (
+              urgentTasks.map((td) => (
+                <div
+                  key={td.id}
+                  className={`urgent-item-card color-${normalizeColor(td.color)}`}
+                  onClick={() => onOpenDetail(td)}
+                >
+                  <div className="urgent-card-top">
+                    <strong>{td.title}</strong>
+                    <span className={`priority-badge ${normalizePriority(td.priority)}`}>
+                      <Flag size={10} /> {t(normalizePriority(td.priority))}
+                    </span>
+                  </div>
+                  <small><CalendarDays size={11} /> {formatDateHeading(getTodoDueDate(td), "th-TH", true)}</small>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 6. Mood & Working State Tracker */}
+      <div className="card mood-card-container">
+        <div>
+          <span className="eyebrow">{t("moodTracker")}</span>
+          <h3>{t("workingState")}</h3>
+        </div>
+        <div className="mood-grid">
+          {MOOD_OPTIONS.map((item) => (
+            <button
+              type="button"
+              key={item.value}
+              className={selectedMood === item.value ? "is-active" : ""}
+              onClick={() => onMoodChange(item.value)}
+            >
+              {t(item.key)}
+            </button>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ============================================================ */
+/*  Full-Featured Settings Page                                  */
+/* ============================================================ */
+
+function SettingsView({
+  userName,
+  onUserNameChange,
+  soundEnabled,
+  onSoundToggle,
+  accentColor,
+  onAccentChange,
+  firstDayOfWeek,
+  onFirstDayChange,
+  boards,
+  activeBoardId,
+  onSelectDefaultBoard,
+  onClearCompletedRequest,
+  onResetWorkspaceRequest,
+  onExportBackup,
+  onImportBackup,
+  saveMsg,
+  t,
+}: {
+  userName: string;
+  onUserNameChange: (val: string) => void;
+  soundEnabled: boolean;
+  onSoundToggle: (enabled: boolean) => void;
+  accentColor: AccentColor;
+  onAccentChange: (val: AccentColor) => void;
+  firstDayOfWeek: "sun" | "mon";
+  onFirstDayChange: (val: "sun" | "mon") => void;
+  boards: Board[];
+  activeBoardId: number | null;
+  onSelectDefaultBoard: (id: number) => void;
+  onClearCompletedRequest: () => void;
+  onResetWorkspaceRequest: () => void;
+  onExportBackup: () => void;
+  onImportBackup: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  saveMsg: string;
+  t: (key: TranslationKey) => string;
+}) {
+  const { theme, toggleTheme } = useTheme();
+  const { language, setLanguage } = useLanguage();
+  const importFileRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <section className="settings-page-wrapper" aria-label={t("settings")}>
+      <div className="settings-header card">
+        <div>
+          <span className="eyebrow">{t("workspace")}</span>
+          <h2>{t("workspaceSettings")}</h2>
+        </div>
+        {saveMsg && <div className="settings-toast-badge"><Check size={14} /> {saveMsg}</div>}
+      </div>
+
+      {/* 1. Profile & Workspace */}
+      <div className="settings-section card">
+        <div className="settings-section-title">
+          <User size={18} />
+          <h3>{t("userProfile")}</h3>
+        </div>
+
+        <div className="settings-row">
+          <div>
+            <strong>{t("displayName")}</strong>
+            <small>ชื่อที่แสดงในโปรไฟล์ การ์ด และความคิดเห็น</small>
+          </div>
+          <input
+            type="text"
+            className="settings-input"
+            value={userName}
+            onChange={(e) => onUserNameChange(e.target.value)}
+          />
+        </div>
+
+        <div className="settings-row">
+          <div>
+            <strong>{t("defaultBoard")}</strong>
+            <small>บอร์ดที่เลือกใช้งานอยู่ในปัจจุบัน</small>
+          </div>
+          <select
+            className="settings-select"
+            value={activeBoardId ?? ""}
+            onChange={(e) => onSelectDefaultBoard(Number(e.target.value))}
+          >
+            {boards.map((b) => <option key={b.id} value={b.id}>{b.title}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* 2. Appearance & Accent Color Theme */}
+      <div className="settings-section card">
+        <div className="settings-section-title">
+          <Palette size={18} />
+          <h3>{t("appearance")}</h3>
+        </div>
+
+        <div className="settings-row">
+          <div>
+            <strong>{t("theme")}</strong>
+            <small>สลับโหมดมืด (Dark) หรือโหมดสว่าง (Light)</small>
+          </div>
+          <button type="button" className="theme-toggle-settings-btn" onClick={toggleTheme}>
+            {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+            <span>{theme === "dark" ? t("light") : t("dark")}</span>
+          </button>
+        </div>
+
+        <div className="settings-row">
+          <div>
+            <strong>{t("accentColor")}</strong>
+            <small>เลือกโทนสีหลักของระบบและปุ่มต่างๆ</small>
+          </div>
+          <div className="accent-color-picker">
+            {ACCENT_COLOR_OPTIONS.map((c) => (
+              <button
+                key={c.value}
+                type="button"
+                className={`accent-color-circle ${accentColor === c.value ? "is-selected" : ""}`}
+                style={{ backgroundColor: c.hex }}
+                onClick={() => onAccentChange(c.value)}
+                title={c.label}
+              >
+                {accentColor === c.value && <Check size={12} color="#fff" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Sound & Alerts */}
+      <div className="settings-section card">
+        <div className="settings-section-title">
+          <Volume2 size={18} />
+          <h3>{t("soundAndAlerts")}</h3>
+        </div>
+
+        <div className="settings-row">
+          <div>
+            <strong>{t("completionSound")}</strong>
+            <small>เล่นเสียงเอฟเฟกต์ Chime เมื่อกดติ๊กถูกทำงานสำเร็จ</small>
+          </div>
+          <div className="sound-toggle-actions">
+            <button
+              type="button"
+              className="test-sound-btn"
+              onClick={() => playCompletionSound()}
+              title="Test Sound FX"
+            >
+              ทดสอบเสียง 🎵
+            </button>
+            <label className="toggle-switch-wrap">
+              <input
+                type="checkbox"
+                checked={soundEnabled}
+                onChange={(e) => onSoundToggle(e.target.checked)}
+              />
+              <span className="toggle-slider" />
+            </label>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. Language & Regional */}
+      <div className="settings-section card">
+        <div className="settings-section-title">
+          <Calendar size={18} />
+          <h3>ภาษาและปฏิทิน</h3>
+        </div>
+
+        <div className="settings-row">
+          <div>
+            <strong>{t("language")}</strong>
+            <small>สลับภาษาที่แสดงในระบบ</small>
+          </div>
+          <LanguageToggle language={language} onChange={setLanguage} />
+        </div>
+
+        <div className="settings-row">
+          <div>
+            <strong>วันเริ่มต้นของสัปดาห์ในปฏิทิน</strong>
+            <small>เลือกวันแรกในมุมมองปฏิทิน</small>
+          </div>
+          <select
+            className="settings-select"
+            value={firstDayOfWeek}
+            onChange={(e) => onFirstDayChange(e.target.value as "sun" | "mon")}
+          >
+            <option value="sun">วันอาทิตย์ (Sunday)</option>
+            <option value="mon">วันจันทร์ (Monday)</option>
+          </select>
+        </div>
+      </div>
+
+      {/* 5. Data Management & Backup */}
+      <div className="settings-section card">
+        <div className="settings-section-title">
+          <Database size={18} />
+          <h3>{t("dataManagement")}</h3>
+        </div>
+
+        <div className="settings-row">
+          <div>
+            <strong>{t("exportBackup")}</strong>
+            <small>ดาวน์โหลดไฟล์สำรองข้อมูลบอร์ดและงานทั้งหมด (.json)</small>
+          </div>
+          <button type="button" className="secondary-button" onClick={onExportBackup}>
+            <Download size={14} /> <span>{t("exportBackup")}</span>
+          </button>
+        </div>
+
+        <div className="settings-row">
+          <div>
+            <strong>{t("importBackup")}</strong>
+            <small>นำเข้าข้อมูลงานจากไฟล์ JSON ที่เคยสำรองไว้</small>
+          </div>
+          <div>
+            <button type="button" className="secondary-button" onClick={() => importFileRef.current?.click()}>
+              <Upload size={14} /> <span>{t("importBackup")}</span>
+            </button>
+            <input
+              type="file"
+              ref={importFileRef}
+              style={{ display: "none" }}
+              accept=".json,application/json"
+              onChange={onImportBackup}
+            />
+          </div>
+        </div>
+
+        <div className="settings-row danger-row">
+          <div>
+            <strong>{t("clearCompleted")}</strong>
+            <small>ล้างงานที่ทำเสร็จแล้วในบอร์ดนี้ทั้งหมดเพื่อความสะอาดตา</small>
+          </div>
+          <button type="button" className="danger-button" onClick={onClearCompletedRequest}>
+            <Trash2 size={14} /> <span>{t("clearCompleted")}</span>
+          </button>
+        </div>
+
+        <div className="settings-row danger-row">
+          <div>
+            <strong>{t("resetWorkspace")}</strong>
+            <small>ล้างข้อมูลในระบบและรีเซ็ตกลับเป็นค่าเริ่มต้น</small>
+          </div>
+          <button type="button" className="danger-button" onClick={onResetWorkspaceRequest}>
+            <Trash2 size={14} /> <span>{t("resetWorkspace")}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 6. System Status */}
+      <div className="settings-section card status-section">
+        <div className="settings-section-title">
+          <Database size={18} />
+          <h3>{t("systemStatus")}</h3>
+        </div>
+
+        <div className="system-status-pills">
+          <span className="status-pill connected">
+            <span className="status-dot" /> {t("dbConnected")}
+          </span>
+          <span className="status-pill version">
+            {t("version")}: <strong>v2.5.0 Pro</strong>
+          </span>
+        </div>
+      </div>
     </section>
   );
 }
@@ -2490,7 +3284,7 @@ function TaskDetailModal({
 }
 
 /* ============================================================ */
-/*  Task Form (Create Modal with Toggle Switch & Live Preview)   */
+/*  Task Form (Create Modal)                                     */
 /* ============================================================ */
 
 function TaskForm({
@@ -2688,7 +3482,7 @@ function TaskForm({
 }
 
 /* ============================================================ */
-/*  Other Views & Shared Subcomponents                           */
+/*  Task Card & Other Shared Subcomponents                       */
 /* ============================================================ */
 
 function TaskCard({ todo, t, dateLocale, lists, onEdit, onToggle, onDelete, onMove, onOpenDetail }: { todo: Todo; t: (key: TranslationKey) => string; dateLocale: string; lists: BoardList[]; onEdit: () => void; onToggle: () => void; onDelete: () => void; onMove: (todoId: number, listId: number, position?: number) => void; onOpenDetail: (todo: Todo) => void }) {
@@ -2738,15 +3532,6 @@ function TaskCard({ todo, t, dateLocale, lists, onEdit, onToggle, onDelete, onMo
   );
 }
 
-function AnalyticsView({ stats, todos, selectedMood, onMoodChange, t }: { stats: ReturnType<typeof buildStats>; todos: Todo[]; selectedMood: Mood; onMoodChange: (mood: Mood) => void; t: (key: TranslationKey) => string }) {
-  return <section className="analytics-view" aria-label={t("analytics")}><div className="analytics-hero card"><div><span className="eyebrow">{t("productivity")}</span><h2>{stats.progress}% {t("completionRate")}</h2><p>{stats.completed} / {stats.total} {t("tasksCompleted")}</p></div><div className="progress-ring" style={{ "--progress": `${stats.progress}%` } as CSSProperties}><span>{stats.progress}%</span></div></div><section className="card donut-card"><span className="eyebrow">{t("completedVsPending")}</span><div className="donut-chart" style={{ "--done": `${stats.progress}%` } as CSSProperties} /><div className="chart-legend"><span><i className="done" />{t("completed")}</span><span><i />{t("pending")}</span></div></section><WeeklyChart data={stats.weeklyCompleted} t={t} /><section className="card mood-card"><div><span className="eyebrow">{t("moodTracker")}</span><h2>{t("workingState")}</h2></div><div className="mood-grid">{MOOD_OPTIONS.map((item) => <button type="button" key={item.value} className={selectedMood === item.value ? "is-active" : ""} onClick={() => onMoodChange(item.value)}>{t(item.key)}</button>)}</div></section><div className="stat-grid analytics-stats"><StatCard label={t("currentStreak")} value={stats.streak} icon={<Flame size={18} />} /><StatCard label={t("tasksThisWeek")} value={stats.completedThisWeek} icon={<BarChart3 size={18} />} /><StatCard label={t("tasksThisMonth")} value={todos.filter((todo) => todo.completed && isThisMonth(todo.updated_at)).length} icon={<CheckCircle2 size={18} />} /></div></section>;
-}
-
-function WeeklyChart({ data, t }: { data: Array<{ label: string; count: number }>; t: (key: TranslationKey) => string }) {
-  const max = Math.max(...data.map((item) => item.count), 1);
-  return <section className="card weekly-card"><div><span className="eyebrow">{t("weeklyChart")}</span><h2>{t("tasksCompleted")}</h2></div><div className="weekly-chart">{data.map((item) => <div key={item.label}><span style={{ height: `${Math.max((item.count / max) * 100, 8)}%` }} /><small>{item.label}</small><strong>{item.count}</strong></div>)}</div></section>;
-}
-
 function FilterTabs({ filter, onChange, t }: { filter: Filter; onChange: (filter: Filter) => void; t: (key: TranslationKey) => string }) {
   const filters: Array<{ value: Filter; label: string }> = [{ value: "all", label: t("all") }, { value: "active", label: t("open") }, { value: "completed", label: t("done") }];
   return <div className="filter-tabs" role="tablist" aria-label={t("taskList")}>{filters.map((item) => <button key={item.value} type="button" className={filter === item.value ? "is-active" : ""} onClick={() => onChange(item.value)}>{item.label}</button>)}</div>;
@@ -2757,16 +3542,12 @@ function Modal({ title, children, onClose, destructive = false }: { title: strin
   return <div className={destructive ? "modal-layer destructive" : "modal-layer"} role="presentation" onMouseDown={onClose}><section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><h2 id="modal-title">{title}</h2><button type="button" onClick={onClose} aria-label={t("close")}><X size={18} /></button></div>{children}</section></div>;
 }
 
-function StatCard({ label, value, icon }: { label: string; value: number | string; icon: ReactNode }) {
-  return <article className="stat-card card"><div>{icon}</div><strong>{value}</strong><span>{label}</span></article>;
+function SkeletonList({ compact = false }: { compact?: boolean }) {
+  return <div className={compact ? "skeleton-list compact" : "skeleton-list"}>{Array.from({ length: compact ? 3 : 5 }, (_, index) => <span key={index} />)}</div>;
 }
 
 function EmptyState({ onAdd, t }: { onAdd: () => void; t: (key: TranslationKey) => string }) {
   return <div className="empty-state card"><ListTodo size={36} /><h3>{t("noTasksFound")}</h3><p>{t("noTasksHint")}</p><button type="button" onClick={onAdd}>{t("addTask")}</button></div>;
-}
-
-function SkeletonList({ compact = false }: { compact?: boolean }) {
-  return <div className={compact ? "skeleton-list compact" : "skeleton-list"}>{Array.from({ length: compact ? 3 : 5 }, (_, index) => <span key={index} />)}</div>;
 }
 
 /* ============================================================ */
@@ -2779,23 +3560,27 @@ function buildStats(todos: Todo[], today: Date) {
   const progress = todos.length === 0 ? 0 : Math.round((completed / todos.length) * 100);
   const dueToday = todos.filter((todo) => getTodoDueDate(todo) === todayKey);
   const completedToday = dueToday.filter((todo) => todo.completed).length;
+  const overdue = todos.filter((todo) => !todo.completed && getTodoDueDate(todo) < todayKey).length;
   const weeklyCompleted = getWeeklyCompleted(todos, today);
   const completedThisWeek = weeklyCompleted.reduce((sum, item) => sum + item.count, 0);
   const streak = calculateCurrentStreak(todos, today);
 
-  return { total: todos.length, active, completed, progress, dueToday: dueToday.length, completedToday, pending: active, weeklyCompleted, completedThisWeek, streak, longestStreak: Math.max(streak + 3, streak, completed > 0 ? 1 : 0) };
+  return { total: todos.length, active, completed, progress, dueToday: dueToday.length, completedToday, overdue, pending: active, weeklyCompleted, completedThisWeek, streak, longestStreak: Math.max(streak + 3, streak, completed > 0 ? 1 : 0) };
 }
 
-function buildCalendarDays(baseDate: Date, selectedDate: string): CalendarDay[] {
+function buildCalendarDays(baseDate: Date, selectedDate: string, firstDay: "sun" | "mon" = "sun"): CalendarDay[] {
   const year = baseDate.getFullYear();
   const month = baseDate.getMonth();
   const firstOfMonth = new Date(year, month, 1, 12, 0, 0);
-  const sundayIndex = firstOfMonth.getDay();
+  let dayOffset = firstOfMonth.getDay();
+  if (firstDay === "mon") {
+    dayOffset = (dayOffset + 6) % 7;
+  }
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const totalDays = (sundayIndex + daysInMonth) > 35 ? 42 : 35;
+  const totalDays = (dayOffset + daysInMonth) > 35 ? 42 : 35;
 
   return Array.from({ length: totalDays }, (_, index) => {
-    const date = new Date(year, month, 1 - sundayIndex + index, 12, 0, 0);
+    const date = new Date(year, month, 1 - dayOffset + index, 12, 0, 0);
     const dayKey = toDateInputValue(date);
     return {
       key: dayKey,
@@ -2930,11 +3715,4 @@ function calculateCurrentStreak(todos: Todo[], today: Date) {
     streak += 1;
   }
   return streak;
-}
-
-function isThisMonth(value?: string) {
-  if (!value) return false;
-  const date = new Date(value);
-  const now = new Date();
-  return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
 }
