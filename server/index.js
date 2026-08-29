@@ -47,24 +47,41 @@ const normalizeAlarmDateTime = (value) => {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 };
 
-const normalizeTodo = (todo) => ({
-  ...todo,
-  completed: Boolean(todo.completed),
-  alarmEnabled: Boolean(todo.alarmEnabled),
-  alarm: Boolean(todo.alarmEnabled),
-  images: Array.isArray(todo.images) ? todo.images : (() => {
-    try {
-      return todo.images ? JSON.parse(todo.images) : [];
-    } catch {
-      return [];
+const normalizeTodo = (todo) => {
+  let dueDate = null;
+  if (todo.dueDate) {
+    if (typeof todo.dueDate === "string") {
+      dueDate = todo.dueDate.slice(0, 10);
+    } else if (todo.dueDate instanceof Date) {
+      const y = todo.dueDate.getFullYear();
+      const m = String(todo.dueDate.getMonth() + 1).padStart(2, "0");
+      const d = String(todo.dueDate.getDate()).padStart(2, "0");
+      dueDate = `${y}-${m}-${d}`;
     }
-  })(),
-});
+  } else if (todo.created_at) {
+    dueDate = String(todo.created_at).slice(0, 10);
+  }
+
+  return {
+    ...todo,
+    dueDate,
+    completed: Boolean(todo.completed),
+    alarmEnabled: Boolean(todo.alarmEnabled),
+    alarm: Boolean(todo.alarmEnabled),
+    images: Array.isArray(todo.images) ? todo.images : (() => {
+      try {
+        return todo.images ? JSON.parse(todo.images) : [];
+      } catch {
+        return [];
+      }
+    })(),
+  };
+};
 
 const todoSelect = `
   SELECT
     id, board_id AS "boardId", title, note, description, completed, color, priority, category,
-    due_date AS "dueDate", due_time AS "dueTime",
+    TO_CHAR(due_date, 'YYYY-MM-DD') AS "dueDate", due_time AS "dueTime",
     alarm_enabled AS "alarmEnabled", alarm_datetime AS "alarmDateTime",
     list_id AS "listId", position, image_url AS "imageUrl", images,
     (SELECT COUNT(*) FROM todo_comments WHERE todo_comments.todo_id = todos.id)::int AS "commentsCount",

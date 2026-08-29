@@ -2776,24 +2776,44 @@ function buildStats(todos: Todo[], today: Date) {
 function buildCalendarDays(baseDate: Date, selectedDate: string): CalendarDay[] {
   const year = baseDate.getFullYear();
   const month = baseDate.getMonth();
-  const firstOfMonth = new Date(year, month, 1);
+  const firstOfMonth = new Date(year, month, 1, 12, 0, 0);
   const sundayIndex = firstOfMonth.getDay();
-  const start = new Date(year, month, 1 - sundayIndex);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const totalDays = (sundayIndex + daysInMonth) > 35 ? 42 : 35;
 
-  return Array.from({ length: 35 }, (_, index) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + index);
-    return { key: date.toISOString(), date, isOutside: date.getMonth() !== month, isToday: toDateInputValue(date) === todayKey, isSelected: toDateInputValue(date) === selectedDate };
+  return Array.from({ length: totalDays }, (_, index) => {
+    const date = new Date(year, month, 1 - sundayIndex + index, 12, 0, 0);
+    const dayKey = toDateInputValue(date);
+    return {
+      key: dayKey,
+      date,
+      isOutside: date.getMonth() !== month,
+      isToday: dayKey === todayKey,
+      isSelected: dayKey === selectedDate,
+    };
   });
 }
 
 function normalizeTodo(todo: Todo): Todo {
+  let normalizedDueDate = todayKey;
+  if (todo.dueDate) {
+    if (typeof todo.dueDate === "string") {
+      const match = todo.dueDate.match(/^(\d{4}-\d{2}-\d{2})/);
+      normalizedDueDate = match ? match[1] : todo.dueDate.slice(0, 10);
+    } else if ((todo.dueDate as unknown) instanceof Date) {
+      normalizedDueDate = toDateInputValue(todo.dueDate as unknown as Date);
+    }
+  } else if (todo.created_at) {
+    const match = String(todo.created_at).match(/^(\d{4}-\d{2}-\d{2})/);
+    normalizedDueDate = match ? match[1] : String(todo.created_at).slice(0, 10);
+  }
+
   return {
     ...todo,
     color: normalizeColor(todo.color),
     priority: normalizePriority(todo.priority),
     category: normalizeCategory(todo.category),
-    dueDate: todo.dueDate ?? todo.created_at?.slice(0, 10) ?? todayKey,
+    dueDate: normalizedDueDate,
     dueTime: normalizeTime(todo.dueTime),
     alarmEnabled: Boolean(todo.alarmEnabled ?? todo.alarm),
     listId: todo.listId ?? undefined,
@@ -2822,8 +2842,16 @@ function normalizeCategory(value?: string): Category {
   return CATEGORY_OPTIONS.some((item) => item.value === value) ? (value as Category) : "other";
 }
 
-function getTodoDueDate(todo: Todo) {
-  return todo.dueDate ?? todo.created_at?.slice(0, 10) ?? todayKey;
+function getTodoDueDate(todo: Todo): string {
+  const raw = todo.dueDate || todo.created_at;
+  if (!raw) return todayKey;
+  if (typeof raw === "string") {
+    const match = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (match) return match[1];
+  }
+  const d = new Date(raw);
+  if (!Number.isNaN(d.getTime())) return toDateInputValue(d);
+  return todayKey;
 }
 
 function toDateInputValue(date: Date) {
