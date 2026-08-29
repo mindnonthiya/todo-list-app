@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   BarChart3,
   Bell,
+  BookOpen,
   Calendar,
   CalendarDays,
   Check,
@@ -19,6 +20,7 @@ import {
   Folder,
   Flag,
   GripVertical,
+  HelpCircle,
   ImageIcon,
   LayoutDashboard,
   ListTodo,
@@ -29,7 +31,6 @@ import {
   Paperclip,
   Pencil,
   Plus,
-  RefreshCw,
   Search,
   Settings,
   Sparkles,
@@ -55,7 +56,7 @@ type Priority = "normal" | "important" | "urgent";
 type Category = "work" | "study" | "personal" | "health" | "other";
 type SortMode = "newest" | "oldest" | "completed" | "priority";
 type Mood = "happy" | "calm" | "tired" | "motivated";
-type DialogMode = "edit" | "delete" | "deleteList" | "create" | "createBoard" | "clearCompleted" | "resetWorkspace" | null;
+type DialogMode = "edit" | "delete" | "deleteList" | "create" | "createBoard" | "clearCompleted" | "resetWorkspace" | "guide" | null;
 
 interface Board {
   id: number;
@@ -131,7 +132,6 @@ interface TaskFormState {
   images: string[];
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:5000/api";
 const todayKey = toDateInputValue(new Date());
 
 const COLOR_OPTIONS: Array<{ value: TaskColor; key: "green" | "blue" | "yellow" | "orange" | "purple" | "red"; hex: string }> = [
@@ -217,28 +217,142 @@ function playCompletionSound() {
   }
 }
 
+/* Default Initial Starter Data for Fresh Users */
+const DEFAULT_INITIAL_BOARDS: Board[] = [
+  { id: 1, title: "My Project Planner", color: "blue", created_at: new Date().toISOString() },
+  { id: 2, title: "Personal & Learning", color: "purple", created_at: new Date().toISOString() },
+];
+
+const DEFAULT_INITIAL_LISTS: BoardList[] = [
+  { id: 1, board_id: 1, title: "To Do", position: 0, color: "blue", created_at: new Date().toISOString() },
+  { id: 2, board_id: 1, title: "In Progress", position: 1, color: "yellow", created_at: new Date().toISOString() },
+  { id: 3, board_id: 1, title: "Done", position: 2, color: "green", created_at: new Date().toISOString() },
+  { id: 4, board_id: 2, title: "Reading List", position: 0, color: "purple", created_at: new Date().toISOString() },
+  { id: 5, board_id: 2, title: "Workout & Health", position: 1, color: "green", created_at: new Date().toISOString() },
+];
+
+const DEFAULT_INITIAL_TODOS: Todo[] = [
+  {
+    id: 1,
+    boardId: 1,
+    listId: 1,
+    position: 0,
+    title: "ยินดีต้อนรับสู่ Todo Planner",
+    note: "คลิกเพื่อดูรายละเอียด แนบรูปภาพ หรือเขียนคอมเมนต์",
+    completed: false,
+    color: "red",
+    priority: "urgent",
+    category: "work",
+    dueDate: todayKey,
+    dueTime: "10:00",
+    commentsCount: 1,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 2,
+    boardId: 1,
+    listId: 2,
+    position: 0,
+    title: "ทดสอบลากและวางการ์ด (Drag & Drop)",
+    note: "ลองลากไปวางในคอลัมน์ Done หรือกดปุ่มลูกศรเพื่อย้ายคอลัมน์",
+    completed: false,
+    color: "blue",
+    priority: "important",
+    category: "work",
+    dueDate: todayKey,
+    dueTime: "14:00",
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: 3,
+    boardId: 1,
+    listId: 3,
+    position: 0,
+    title: "งานแรกที่ทำสำเร็จ",
+    note: "ลองคลิกติ๊กถูกเพื่อฟังเสียง Chime เอฟเฟกต์",
+    completed: true,
+    color: "green",
+    priority: "normal",
+    category: "personal",
+    dueDate: todayKey,
+    dueTime: "09:00",
+    created_at: new Date().toISOString(),
+  },
+];
+
+const DEFAULT_INITIAL_COMMENTS: TodoComment[] = [
+  {
+    id: 1,
+    todoId: 1,
+    author: "Workspace User",
+    content: "ยินดีต้อนรับ สามารถกด Ctrl+V เพื่อวางรูปภาพในนี้ได้ทันที",
+    createdAt: new Date().toISOString(),
+  },
+];
+
+function stripEmojis(str?: string | null): string {
+  if (!str) return "";
+  return str
+    .replace(/[\u{1F000}-\u{1F9FF}\u{1FA00}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F300}-\u{1F5FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2300}-\u{23FF}\u{2B50}\u{2B55}\u{2934}\u{2935}\u{25AA}\u{25AB}\u{25B6}\u{25C0}\u{25FB}-\u{25FE}]/gu, "")
+    .trim();
+}
+
 /* ============================================================ */
-/*  Main Component                                               */
+/*  Main Component (Pure Client-Side Local Storage Architecture) */
 /* ============================================================ */
 
 export default function TodoList() {
   const { t, language, setLanguage } = useLanguage();
   const { theme, toggleTheme } = useTheme();
 
-  // User & Settings state
-  const [userName, setUserName] = useState(() => localStorage.getItem("todo-user-name") || "Nonthiya (mj.)");
-  const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem("todo-sound-enabled") !== "false");
-  const [accentColor, setAccentColor] = useState<AccentColor>(() => (localStorage.getItem("todo-accent-color") as AccentColor) || "red");
-  const [firstDayOfWeek, setFirstDayOfWeek] = useState<"sun" | "mon">(() => (localStorage.getItem("todo-first-day") as "sun" | "mon") || "sun");
+  // User & Settings state (Individual & Isolated per device/browser)
+  const [userName, setUserName] = useState(() => {
+    const saved = localStorage.getItem("todo_user_name");
+    if (!saved || saved === "Nonthiya (mj.)") return "Workspace User";
+    return stripEmojis(saved);
+  });
+  const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem("todo_sound_enabled") !== "false");
+  const [accentColor, setAccentColor] = useState<AccentColor>(() => (localStorage.getItem("todo_accent_color") as AccentColor) || "red");
+  const [firstDayOfWeek, setFirstDayOfWeek] = useState<"sun" | "mon">(() => (localStorage.getItem("todo_first_day") as "sun" | "mon") || "sun");
 
-  // Multi-Board States
-  const [boards, setBoards] = useState<Board[]>([]);
-  const [activeBoardId, setActiveBoardId] = useState<number | null>(null);
+  // Local Storage Data States (Automatically sanitizes any legacy cached emojis)
+  const [boards, setBoards] = useState<Board[]>(() => {
+    const saved = localStorage.getItem("todo_planner_boards");
+    const raw = saved ? (JSON.parse(saved) as Board[]) : DEFAULT_INITIAL_BOARDS;
+    return raw.map((b) => ({ ...b, title: stripEmojis(b.title) }));
+  });
+
+  const [activeBoardId, setActiveBoardId] = useState<number>(() => {
+    const saved = localStorage.getItem("todo_planner_active_board_id");
+    if (saved) return Number(saved);
+    const initialBoards = localStorage.getItem("todo_planner_boards");
+    if (initialBoards) {
+      const parsed = JSON.parse(initialBoards) as Board[];
+      if (parsed.length > 0) return parsed[0].id;
+    }
+    return DEFAULT_INITIAL_BOARDS[0].id;
+  });
+
+  const [lists, setLists] = useState<BoardList[]>(() => {
+    const saved = localStorage.getItem("todo_planner_lists");
+    const raw = saved ? (JSON.parse(saved) as BoardList[]) : DEFAULT_INITIAL_LISTS;
+    return raw.map((l) => ({ ...l, title: stripEmojis(l.title) }));
+  });
+
+  const [todos, setTodos] = useState<Todo[]>(() => {
+    const saved = localStorage.getItem("todo_planner_todos");
+    const raw = saved ? (JSON.parse(saved) as Todo[]) : DEFAULT_INITIAL_TODOS;
+    return raw.map((t) => ({ ...normalizeTodo(t), title: stripEmojis(t.title), note: stripEmojis(t.note) }));
+  });
+
+  const [comments, setComments] = useState<TodoComment[]>(() => {
+    const saved = localStorage.getItem("todo_planner_comments");
+    const raw = saved ? (JSON.parse(saved) as TodoComment[]) : DEFAULT_INITIAL_COMMENTS;
+    return raw.map((c) => ({ ...c, content: stripEmojis(c.content) }));
+  });
+
   const [boardDropdownOpen, setBoardDropdownOpen] = useState(false);
   const [newBoardTitle, setNewBoardTitle] = useState("");
-
-  const [todos, setTodos] = useState<Todo[]>([]);
-  const [lists, setLists] = useState<BoardList[]>([]);
   const [form, setForm] = useState<TaskFormState>(() => createDefaultFormState());
   const [filter, setFilter] = useState<Filter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("newest");
@@ -255,8 +369,6 @@ export default function TodoList() {
   const [deletingTodo, setDeletingTodo] = useState<Todo | null>(null);
   const [deletingList, setDeletingList] = useState<BoardList | null>(null);
   const [detailTodo, setDetailTodo] = useState<Todo | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
   const [desktopMenuOpen, setDesktopMenuOpen] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [settingsSaveMsg, setSettingsSaveMsg] = useState("");
@@ -268,81 +380,35 @@ export default function TodoList() {
 
   const dateLocale = language === "th" ? "th-TH" : "en-US";
 
+  // Persistent Local Storage Sync
+  useEffect(() => {
+    localStorage.setItem("todo_planner_boards", JSON.stringify(boards));
+  }, [boards]);
+
+  useEffect(() => {
+    localStorage.setItem("todo_planner_lists", JSON.stringify(lists));
+  }, [lists]);
+
+  useEffect(() => {
+    localStorage.setItem("todo_planner_todos", JSON.stringify(todos));
+  }, [todos]);
+
+  useEffect(() => {
+    localStorage.setItem("todo_planner_comments", JSON.stringify(comments));
+  }, [comments]);
+
+  useEffect(() => {
+    localStorage.setItem("todo_planner_active_board_id", String(activeBoardId));
+  }, [activeBoardId]);
+
   // Apply accent color to document CSS variables
   useEffect(() => {
     const found = ACCENT_COLOR_OPTIONS.find((c) => c.value === accentColor) || ACCENT_COLOR_OPTIONS[0];
     document.documentElement.style.setProperty("--primary", found.hex);
     document.documentElement.style.setProperty("--primary-strong", found.strong);
     document.documentElement.style.setProperty("--primary-soft", found.soft);
-    localStorage.setItem("todo-accent-color", accentColor);
+    localStorage.setItem("todo_accent_color", accentColor);
   }, [accentColor]);
-
-  /* ---- Fetch Boards ---- */
-
-  const fetchBoards = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_BASE}/boards`);
-      if (!res.ok) {
-        const errorData = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
-        throw new Error(errorData.error || errorData.message || "Unable to load boards");
-      }
-      const data = (await res.json()) as Board[];
-      setBoards(data);
-      if (data.length > 0 && !activeBoardId) {
-        setActiveBoardId(data[0].id);
-      }
-    } catch (err: unknown) {
-      console.error("fetchBoards error:", err);
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(`${t("apiError")} (${msg})`);
-    }
-  }, [activeBoardId, t]);
-
-  /* ---- Fetch Lists & Todos for Active Board ---- */
-
-  const fetchListsAndTodos = useCallback(async (boardId: number | null) => {
-    setIsLoading(true);
-    setError("");
-
-    try {
-      const queryParam = boardId ? `?boardId=${boardId}` : "";
-      const [listRes, todoRes] = await Promise.all([
-        fetch(`${API_BASE}/lists${queryParam}`),
-        fetch(`${API_BASE}/todos${queryParam}`),
-      ]);
-
-      if (!listRes.ok || !todoRes.ok) throw new Error("Unable to load board data");
-
-      const listData = (await listRes.json()) as BoardList[];
-      const todoData = (await todoRes.json()) as Todo[];
-
-      setLists(listData);
-      setTodos(todoData.map(normalizeTodo));
-    } catch (fetchError) {
-      console.error(fetchError);
-      setError(t("apiError"));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [t]);
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      void fetchBoards();
-    }, 0);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [fetchBoards]);
-
-  useEffect(() => {
-    if (!activeBoardId) return;
-
-    const timeoutId = window.setTimeout(() => {
-      void fetchListsAndTodos(activeBoardId);
-    }, 0);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [activeBoardId, fetchListsAndTodos]);
 
   // Click outside menus
   useEffect(() => {
@@ -363,17 +429,25 @@ export default function TodoList() {
   /* ---- Derived data ---- */
 
   const currentBoard = useMemo(() => {
-    return boards.find((b) => b.id === activeBoardId) || boards[0] || { id: 1, title: "Main Board" };
+    return boards.find((b) => b.id === activeBoardId) || boards[0] || DEFAULT_INITIAL_BOARDS[0];
   }, [boards, activeBoardId]);
 
+  const currentBoardLists = useMemo(() => {
+    return lists.filter((l) => (l.board_id ?? 1) === activeBoardId).sort((a, b) => a.position - b.position);
+  }, [lists, activeBoardId]);
+
+  const currentBoardTodos = useMemo(() => {
+    return todos.filter((t) => (t.boardId ?? 1) === activeBoardId);
+  }, [todos, activeBoardId]);
+
   const today = useMemo(() => new Date(), []);
-  const stats = useMemo(() => buildStats(todos, today), [today, todos]);
+  const stats = useMemo(() => buildStats(currentBoardTodos, today), [today, currentBoardTodos]);
   const calendarDays = useMemo(() => buildCalendarDays(currentDate, selectedDate, firstDayOfWeek), [currentDate, selectedDate, firstDayOfWeek]);
 
   const visibleTodos = useMemo(() => {
     const normalizedQuery = search.trim().toLowerCase();
 
-    return todos
+    return currentBoardTodos
       .filter((todo) => {
         if (filter === "active" && todo.completed) return false;
         if (filter === "completed" && !todo.completed) return false;
@@ -386,7 +460,7 @@ export default function TodoList() {
         if (sortMode === "priority") return priorityRank[normalizePriority(b.priority)] - priorityRank[normalizePriority(a.priority)];
         return (a.position ?? 0) - (b.position ?? 0) || timestamp(b.created_at) - timestamp(a.created_at);
       });
-  }, [filter, search, sortMode, todos]);
+  }, [filter, search, sortMode, currentBoardTodos]);
 
   const viewLabels = useMemo<Record<PlannerView, string>>(() => ({
     board: t("board"),
@@ -396,35 +470,37 @@ export default function TodoList() {
     settings: t("settings"),
   }), [t]);
 
-  /* ---- CRUD: Boards ---- */
+  /* ---- LocalStorage CRUD: Boards ---- */
 
-  const handleCreateBoard = async () => {
+  const handleCreateBoard = () => {
     const title = newBoardTitle.trim();
     if (!title) return;
 
-    try {
-      const res = await fetch(`${API_BASE}/boards`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
-      });
+    const newId = Date.now();
+    const newBoard: Board = {
+      id: newId,
+      title,
+      color: "blue",
+      created_at: new Date().toISOString(),
+    };
 
-      if (res.ok) {
-        const created = (await res.json()) as Board;
-        setBoards((prev) => [...prev, created]);
-        setActiveBoardId(created.id);
-        setNewBoardTitle("");
-        setDialogMode(null);
-        setBoardDropdownOpen(false);
-      }
-    } catch (err) {
-      console.error("Failed to create board", err);
-    }
+    const defaultListsForBoard: BoardList[] = [
+      { id: Date.now() + 1, board_id: newId, title: "To Do", position: 0, color: "blue", created_at: new Date().toISOString() },
+      { id: Date.now() + 2, board_id: newId, title: "In Progress", position: 1, color: "yellow", created_at: new Date().toISOString() },
+      { id: Date.now() + 3, board_id: newId, title: "Done", position: 2, color: "green", created_at: new Date().toISOString() },
+    ];
+
+    setBoards((prev) => [...prev, newBoard]);
+    setLists((prev) => [...prev, ...defaultListsForBoard]);
+    setActiveBoardId(newId);
+    setNewBoardTitle("");
+    setDialogMode(null);
+    setBoardDropdownOpen(false);
   };
 
-  /* ---- CRUD: Todos ---- */
+  /* ---- LocalStorage CRUD: Todos ---- */
 
-  const addTodo = useCallback(async () => {
+  const addTodo = useCallback(() => {
     const trimmedTitle = form.title.trim();
     if (!trimmedTitle) {
       inputRef.current?.focus();
@@ -432,90 +508,67 @@ export default function TodoList() {
     }
 
     const alarmDateTime = form.alarmEnabled ? `${form.alarmDate}T${form.alarmTime}` : null;
-    setError("");
+    const targetListId = form.listId ?? (currentBoardLists[0]?.id || 1);
 
-    try {
-      const res = await fetch(`${API_BASE}/todos`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          boardId: activeBoardId,
-          title: trimmedTitle,
-          note: form.note.trim(),
-          color: form.color,
-          priority: form.priority,
-          category: form.category,
-          dueDate: form.dueDate,
-          dueTime: form.dueTime,
-          alarm: form.alarmEnabled,
-          alarmEnabled: form.alarmEnabled,
-          alarmDateTime,
-          listId: form.listId,
-          imageUrl: form.imageUrl.trim() || null,
-          images: form.images,
-        }),
-      });
+    const newTodo: Todo = {
+      id: Date.now(),
+      boardId: activeBoardId,
+      title: trimmedTitle,
+      note: form.note.trim(),
+      completed: false,
+      color: form.color,
+      priority: form.priority,
+      category: form.category,
+      dueDate: form.dueDate,
+      dueTime: form.dueTime,
+      alarm: form.alarmEnabled,
+      alarmEnabled: form.alarmEnabled,
+      alarmDateTime,
+      listId: targetListId,
+      position: currentBoardTodos.filter((t) => t.listId === targetListId).length,
+      imageUrl: form.imageUrl.trim() || null,
+      images: form.images,
+      commentsCount: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
 
-      if (!res.ok) throw new Error("Unable to create todo");
-      const newTodo = normalizeTodo(await res.json());
-      setTodos((currentTodos) => [newTodo, ...currentTodos]);
-      setForm(createDefaultFormState(activeBoardId, form.listId));
-      setDialogMode(null);
-    } catch (fetchError) {
-      console.error(fetchError);
-      setError(t("addError"));
-    }
-  }, [activeBoardId, form, t]);
+    setTodos((prev) => [newTodo, ...prev]);
+    setForm(createDefaultFormState(activeBoardId, targetListId));
+    setDialogMode(null);
+  }, [activeBoardId, currentBoardLists, currentBoardTodos, form]);
 
-  const updateTodo = useCallback(async (id: number, updates: Partial<Todo>) => {
-    setError("");
-
-    // Trigger sound FX if task was toggled to completed
+  const updateTodo = useCallback((id: number, updates: Partial<Todo>) => {
     if (updates.completed === true && soundEnabled) {
       playCompletionSound();
     }
 
-    try {
-      const res = await fetch(`${API_BASE}/todos/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates),
-      });
+    setTodos((prev) =>
+      prev.map((t) => {
+        if (t.id === id) {
+          const updated = { ...t, ...updates, updated_at: new Date().toISOString() };
+          if (detailTodo && detailTodo.id === id) {
+            setDetailTodo(updated);
+          }
+          return updated;
+        }
+        return t;
+      })
+    );
+  }, [detailTodo, soundEnabled]);
 
-      if (!res.ok) throw new Error("Unable to update todo");
-      const updatedTodo = normalizeTodo(await res.json());
-      setTodos((currentTodos) => currentTodos.map((todo) => (todo.id === id ? updatedTodo : todo)));
-      if (detailTodo && detailTodo.id === id) {
-        setDetailTodo(updatedTodo);
-      }
-      return updatedTodo;
-    } catch (fetchError) {
-      console.error(fetchError);
-      setError(t("updateError"));
-      return null;
-    }
-  }, [detailTodo, soundEnabled, t]);
-
-  const deleteTodo = useCallback(async () => {
+  const deleteTodo = useCallback(() => {
     if (!deletingTodo) return;
-    setError("");
-
-    try {
-      const res = await fetch(`${API_BASE}/todos/${deletingTodo.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Unable to delete todo");
-      setTodos((currentTodos) => currentTodos.filter((todo) => todo.id !== deletingTodo.id));
-      if (detailTodo && detailTodo.id === deletingTodo.id) {
-        setDetailTodo(null);
-      }
-      setDialogMode(null);
-      setDeletingTodo(null);
-    } catch (fetchError) {
-      console.error(fetchError);
-      setError(t("deleteError"));
+    setTodos((prev) => prev.filter((t) => t.id !== deletingTodo.id));
+    setComments((prev) => prev.filter((c) => c.todoId !== deletingTodo.id));
+    if (detailTodo && detailTodo.id === deletingTodo.id) {
+      setDetailTodo(null);
     }
-  }, [deletingTodo, detailTodo, t]);
+    setDialogMode(null);
+    setDeletingTodo(null);
+  }, [deletingTodo, detailTodo]);
 
-  // Smooth Optimistic Drag & Drop with Zero Flickering / No Reload
+  // Smooth Optimistic Drag & Drop with Instant LocalStorage Update
   const moveTodo = useCallback((todoId: number, targetListId: number, targetPos?: number) => {
     setTodos((currentTodos) => {
       const todoToMove = currentTodos.find((t) => t.id === todoId);
@@ -523,7 +576,7 @@ export default function TodoList() {
 
       const remaining = currentTodos.filter((t) => t.id !== todoId);
       const targetListItems = remaining
-        .filter((t) => t.listId === targetListId)
+        .filter((t) => t.listId === targetListId && (t.boardId ?? 1) === activeBoardId)
         .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
       const insertIndex = typeof targetPos === "number" ? Math.max(0, Math.min(targetPos, targetListItems.length)) : targetListItems.length;
@@ -535,83 +588,82 @@ export default function TodoList() {
       });
 
       const reindexedTarget = targetListItems.map((t, idx) => ({ ...t, position: idx }));
-      const otherListsItems = remaining.filter((t) => t.listId !== targetListId);
+      const otherTodos = remaining.filter((t) => t.listId !== targetListId || (t.boardId ?? 1) !== activeBoardId);
 
-      return [...otherListsItems, ...reindexedTarget];
+      return [...otherTodos, ...reindexedTarget];
     });
 
     if (detailTodo && detailTodo.id === todoId) {
       setDetailTodo((prev) => prev ? { ...prev, listId: targetListId, position: targetPos ?? prev.position } : null);
     }
+  }, [activeBoardId, detailTodo]);
 
-    // Silent background sync with server
-    fetch(`${API_BASE}/todos/${todoId}/move`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ listId: targetListId, position: targetPos }),
-    }).catch((err) => {
-      console.error("Move error:", err);
-    });
-  }, [detailTodo]);
+  /* ---- LocalStorage CRUD: Lists ---- */
 
-  /* ---- CRUD: Lists ---- */
+  const createList = useCallback((title: string) => {
+    const newList: BoardList = {
+      id: Date.now(),
+      board_id: activeBoardId,
+      title,
+      position: currentBoardLists.length,
+      color: "green",
+      created_at: new Date().toISOString(),
+    };
+    setLists((prev) => [...prev, newList]);
+  }, [activeBoardId, currentBoardLists.length]);
 
-  const createList = useCallback(async (title: string) => {
-    try {
-      const res = await fetch(`${API_BASE}/lists`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, boardId: activeBoardId }),
-      });
-      if (!res.ok) throw new Error("Unable to create list");
-      const newList = (await res.json()) as BoardList;
-      setLists((cur) => [...cur, newList]);
-    } catch (fetchError) {
-      console.error(fetchError);
-    }
-  }, [activeBoardId]);
-
-  const updateListTitle = useCallback(async (id: number, title: string) => {
-    try {
-      const res = await fetch(`${API_BASE}/lists/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
-      });
-      if (!res.ok) throw new Error("Unable to update list");
-      const updated = (await res.json()) as BoardList;
-      setLists((cur) => cur.map((l) => (l.id === id ? updated : l)));
-    } catch (fetchError) {
-      console.error(fetchError);
-    }
+  const updateListTitle = useCallback((id: number, title: string) => {
+    setLists((prev) => prev.map((l) => (l.id === id ? { ...l, title } : l)));
   }, []);
 
-  const confirmDeleteList = useCallback(async () => {
+  const confirmDeleteList = useCallback(() => {
     if (!deletingList) return;
-    try {
-      const res = await fetch(`${API_BASE}/lists/${deletingList.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Unable to delete list");
-      setLists((cur) => cur.filter((l) => l.id !== deletingList.id));
-      setDialogMode(null);
-      setDeletingList(null);
-      if (activeBoardId) void fetchListsAndTodos(activeBoardId);
-    } catch (fetchError) {
-      console.error(fetchError);
-    }
-  }, [activeBoardId, deletingList, fetchListsAndTodos]);
+    const remainingLists = currentBoardLists.filter((l) => l.id !== deletingList.id);
+    const fallbackListId = remainingLists[0]?.id || 1;
+
+    // Reassign orphan tasks to the first list
+    setTodos((prev) =>
+      prev.map((t) => (t.listId === deletingList.id && (t.boardId ?? 1) === activeBoardId ? { ...t, listId: fallbackListId } : t))
+    );
+    setLists((prev) => prev.filter((l) => l.id !== deletingList.id));
+    setDialogMode(null);
+    setDeletingList(null);
+  }, [activeBoardId, currentBoardLists, deletingList]);
+
+  /* ---- LocalStorage CRUD: Comments ---- */
+
+  const addComment = useCallback((todoId: number, content: string, imageUrl?: string | null) => {
+    const newComment: TodoComment = {
+      id: Date.now(),
+      todoId,
+      author: userName,
+      content,
+      imageUrl: imageUrl || null,
+      createdAt: new Date().toISOString(),
+    };
+    setComments((prev) => [...prev, newComment]);
+    setTodos((prev) =>
+      prev.map((t) => (t.id === todoId ? { ...t, commentsCount: (t.commentsCount ?? 0) + 1 } : t))
+    );
+  }, [userName]);
+
+  const updateComment = useCallback((id: number, content: string) => {
+    setComments((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, content, updatedAt: new Date().toISOString() } : c))
+    );
+  }, []);
+
+  const deleteComment = useCallback((id: number, todoId: number) => {
+    setComments((prev) => prev.filter((c) => c.id !== id));
+    setTodos((prev) =>
+      prev.map((t) => (t.id === todoId ? { ...t, commentsCount: Math.max((t.commentsCount ?? 1) - 1, 0) } : t))
+    );
+  }, []);
 
   /* ---- Clear Done & Reset ---- */
 
-  const handleClearCompletedTasks = async () => {
-    const completedIds = todos.filter((t) => t.completed).map((t) => t.id);
-    for (const id of completedIds) {
-      try {
-        await fetch(`${API_BASE}/todos/${id}`, { method: "DELETE" });
-      } catch (err) {
-        console.error(err);
-      }
-    }
-    setTodos((prev) => prev.filter((t) => !t.completed));
+  const handleClearCompletedTasks = () => {
+    setTodos((prev) => prev.filter((t) => !((t.boardId ?? 1) === activeBoardId && t.completed)));
     setDialogMode(null);
     setSettingsSaveMsg("ล้างงานที่ทำเสร็จแล้วเรียบร้อย!");
     setTimeout(() => setSettingsSaveMsg(""), 3000);
@@ -624,6 +676,7 @@ export default function TodoList() {
       boards,
       lists,
       todos,
+      comments,
     };
     const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -639,26 +692,22 @@ export default function TodoList() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = async (ev) => {
+    reader.onload = (ev) => {
       try {
         const content = ev.target?.result as string;
         const parsed = JSON.parse(content);
-        if (Array.isArray(parsed.todos)) {
-          // Import todos
-          for (const todoItem of parsed.todos) {
-            await fetch(`${API_BASE}/todos`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ ...todoItem, id: undefined }),
-            });
-          }
-          if (activeBoardId) void fetchListsAndTodos(activeBoardId);
+        if (Array.isArray(parsed.boards) && Array.isArray(parsed.todos)) {
+          setBoards(parsed.boards);
+          if (Array.isArray(parsed.lists)) setLists(parsed.lists);
+          setTodos(parsed.todos.map(normalizeTodo));
+          if (Array.isArray(parsed.comments)) setComments(parsed.comments);
+          if (parsed.boards.length > 0) setActiveBoardId(parsed.boards[0].id);
+
           setSettingsSaveMsg("นำเข้าข้อมูลสำเร็จแล้ว!");
           setTimeout(() => setSettingsSaveMsg(""), 3000);
         }
       } catch (err) {
         console.error("Import error", err);
-        setError("ไฟล์ข้อมูลไม่ถูกต้อง");
       }
     };
     reader.readAsText(file);
@@ -667,10 +716,10 @@ export default function TodoList() {
   /* ---- Modal / Action Handlers ---- */
 
   const openCreateDialog = useCallback((targetListId?: number, defaultDate?: string) => {
-    setForm(createDefaultFormState(activeBoardId, targetListId ?? (lists[0]?.id || null), defaultDate || todayKey));
+    setForm(createDefaultFormState(activeBoardId, targetListId ?? (currentBoardLists[0]?.id || 1), defaultDate || todayKey));
     setDialogMode("create");
     window.setTimeout(() => inputRef.current?.focus(), 120);
-  }, [activeBoardId, lists]);
+  }, [activeBoardId, currentBoardLists]);
 
   const openEditDialog = useCallback((todo: Todo) => {
     setEditingTodo(todo);
@@ -678,16 +727,14 @@ export default function TodoList() {
     setDialogMode("edit");
   }, []);
 
-  const saveEditing = useCallback(async () => {
+  const saveEditing = useCallback(() => {
     const trimmedTitle = editingTitle.trim();
     if (!editingTodo || !trimmedTitle) return;
 
-    const updatedTodo = await updateTodo(editingTodo.id, { title: trimmedTitle });
-    if (updatedTodo) {
-      setDialogMode(null);
-      setEditingTodo(null);
-      setEditingTitle("");
-    }
+    updateTodo(editingTodo.id, { title: trimmedTitle });
+    setDialogMode(null);
+    setEditingTodo(null);
+    setEditingTitle("");
   }, [editingTitle, editingTodo, updateTodo]);
 
   const requestDelete = useCallback((todo: Todo) => {
@@ -775,7 +822,7 @@ export default function TodoList() {
         {/* Sidebar for Desktop */}
         <aside className="sidebar" aria-label="Primary navigation">
           <div className="brand-mark">
-            <div className="brand-glyph" aria-hidden="true"><LayoutDashboard size={20} /></div>
+            <AppLogo size={32} />
             <div><strong>{t("appName")}</strong><span>{t("workspace")}</span></div>
           </div>
 
@@ -810,7 +857,7 @@ export default function TodoList() {
                   title="Switch board"
                 >
                   <LayoutDashboard size={16} className="board-icon" />
-                  <strong className="board-title-truncate">{currentBoard.title}</strong>
+                  <strong className="board-title-truncate">{stripEmojis(currentBoard.title)}</strong>
                   <ChevronDown size={14} className={`dropdown-arrow ${boardDropdownOpen ? "open" : ""}`} />
                 </button>
 
@@ -829,7 +876,7 @@ export default function TodoList() {
                           }}
                         >
                           <LayoutDashboard size={14} />
-                          <span>{b.title}</span>
+                          <span>{stripEmojis(b.title)}</span>
                           {b.id === activeBoardId && <Check size={14} className="check-active" />}
                         </button>
                       ))}
@@ -893,12 +940,18 @@ export default function TodoList() {
               </div>
 
               {/* Desktop User Profile Badge */}
-              <div className="user-profile-badge desktop-only-btn">
+              <button
+                type="button"
+                className="user-profile-badge desktop-only-btn"
+                onClick={() => setActiveView("settings")}
+                title={t("userProfile")}
+                style={{ cursor: "pointer", border: "1px solid var(--border)", background: "transparent" }}
+              >
                 <User size={14} className="user-badge-icon" />
                 <span>{userName}</span>
-              </div>
+              </button>
 
-              {/* Desktop Hamburger Menu (☰) -> Changed from 3 dots, includes Refresh & Settings */}
+              {/* Desktop Hamburger Menu */}
               <div className="more-menu-container desktop-only-btn" ref={desktopMenuRef}>
                 <button
                   type="button"
@@ -914,11 +967,11 @@ export default function TodoList() {
                     <button
                       type="button"
                       onClick={() => {
-                        if (activeBoardId) void fetchListsAndTodos(activeBoardId);
+                        setDialogMode("guide");
                         setDesktopMenuOpen(false);
                       }}
                     >
-                      <RefreshCw size={15} /> <span>รีเฟรชข้อมูล</span>
+                      <HelpCircle size={15} /> <span>{t("userGuide")}</span>
                     </button>
                     <button
                       type="button"
@@ -933,7 +986,7 @@ export default function TodoList() {
                 )}
               </div>
 
-              {/* Mobile Hamburger Menu (☰) */}
+              {/* Mobile Hamburger Menu */}
               <button
                 type="button"
                 className="mobile-hamburger-btn"
@@ -961,6 +1014,14 @@ export default function TodoList() {
                 </div>
 
                 <div className="drawer-menu-list">
+                  {/* User Guide in Drawer */}
+                  <div className="drawer-item" onClick={() => { setDialogMode("guide"); setMobileDrawerOpen(false); }}>
+                    <div className="drawer-item-left">
+                      <HelpCircle size={17} />
+                      <span>{t("userGuide")}</span>
+                    </div>
+                  </div>
+
                   {/* Theme Switcher Row */}
                   <div className="drawer-item" onClick={toggleTheme}>
                     <div className="drawer-item-left">
@@ -994,32 +1055,21 @@ export default function TodoList() {
                       <span>{t("analytics")}</span>
                     </div>
                   </div>
-
-                  {/* Refresh Board */}
-                  <div className="drawer-item" onClick={() => { if (activeBoardId) void fetchListsAndTodos(activeBoardId); setMobileDrawerOpen(false); }}>
-                    <div className="drawer-item-left">
-                      <RefreshCw size={17} />
-                      <span>รีเฟรชบอร์ด</span>
-                    </div>
-                  </div>
                 </div>
               </aside>
             </div>
           )}
 
-          {error && <div className="app-error" role="alert">{error}</div>}
-
           {/* Board View */}
           {activeView === "board" && (
             <BoardView
-              lists={lists}
+              lists={currentBoardLists}
               todos={visibleTodos}
               t={t}
               dateLocale={dateLocale}
-              isLoading={isLoading}
               onAddCard={(listId) => openCreateDialog(listId)}
               onMoveCard={moveTodo}
-              onToggle={(todo: Todo) => void updateTodo(todo.id, { completed: !todo.completed })}
+              onToggle={(todo: Todo) => updateTodo(todo.id, { completed: !todo.completed })}
               onEdit={openEditDialog}
               onDelete={requestDelete}
               onOpenDetail={openDetailModal}
@@ -1033,7 +1083,7 @@ export default function TodoList() {
           {activeView === "calendar" && (
             <CalendarPlannerView
               boardTitle={currentBoard.title}
-              todos={todos}
+              todos={currentBoardTodos}
               currentDate={currentDate}
               selectedDate={selectedDate}
               calendarDays={calendarDays}
@@ -1042,7 +1092,6 @@ export default function TodoList() {
               monthLabel={monthLabel}
               dateLocale={dateLocale}
               t={t}
-              isLoading={isLoading}
               onSelectDate={(dateStr) => setSelectedDate(dateStr)}
               onPrev={handleCalendarPrev}
               onNext={handleCalendarNext}
@@ -1052,7 +1101,7 @@ export default function TodoList() {
               onToggleViewMenu={() => setCalendarViewMenuOpen((prev) => !prev)}
               onOpenDetail={openDetailModal}
               onAddCard={(dateStr) => openCreateDialog(undefined, dateStr)}
-              onToggleTodo={(todo) => void updateTodo(todo.id, { completed: !todo.completed })}
+              onToggleTodo={(todo) => updateTodo(todo.id, { completed: !todo.completed })}
             />
           )}
 
@@ -1072,15 +1121,15 @@ export default function TodoList() {
                 </div>
               </div>
               <div className="task-board">
-                {isLoading ? <SkeletonList /> : visibleTodos.length === 0 ? <EmptyState onAdd={() => openCreateDialog()} t={t} /> : visibleTodos.map((todo) => (
+                {visibleTodos.length === 0 ? <EmptyState onAdd={() => openCreateDialog()} t={t} /> : visibleTodos.map((todo) => (
                   <TaskCard
                     key={todo.id}
                     todo={todo}
                     t={t}
                     dateLocale={dateLocale}
-                    lists={lists}
+                    lists={currentBoardLists}
                     onEdit={() => openEditDialog(todo)}
-                    onToggle={() => void updateTodo(todo.id, { completed: !todo.completed })}
+                    onToggle={() => updateTodo(todo.id, { completed: !todo.completed })}
                     onDelete={() => requestDelete(todo)}
                     onMove={moveTodo}
                     onOpenDetail={openDetailModal}
@@ -1094,7 +1143,7 @@ export default function TodoList() {
           {activeView === "progress" && (
             <AnalyticsDashboardView
               stats={stats}
-              todos={todos}
+              todos={currentBoardTodos}
               selectedMood={selectedMood}
               onMoodChange={setSelectedMood}
               t={t}
@@ -1108,19 +1157,19 @@ export default function TodoList() {
               userName={userName}
               onUserNameChange={(val) => {
                 setUserName(val);
-                localStorage.setItem("todo-user-name", val);
+                localStorage.setItem("todo_user_name", val);
               }}
               soundEnabled={soundEnabled}
               onSoundToggle={(enabled) => {
                 setSoundEnabled(enabled);
-                localStorage.setItem("todo-sound-enabled", String(enabled));
+                localStorage.setItem("todo_sound_enabled", String(enabled));
               }}
               accentColor={accentColor}
               onAccentChange={setAccentColor}
               firstDayOfWeek={firstDayOfWeek}
               onFirstDayChange={(val) => {
                 setFirstDayOfWeek(val);
-                localStorage.setItem("todo-first-day", val);
+                localStorage.setItem("todo_first_day", val);
               }}
               boards={boards}
               activeBoardId={activeBoardId}
@@ -1139,25 +1188,81 @@ export default function TodoList() {
       {/* Mobile Bottom Navigation Bar */}
       <Navigation activeView={activeView} labels={viewLabels} onChange={setActiveView} variant="bottom" onCreateClick={() => openCreateDialog()} />
 
+      {/* Floating User Guide Button (Bottom Right) */}
+      <button
+        type="button"
+        className="floating-guide-widget"
+        onClick={() => setDialogMode("guide")}
+        title={t("userGuide")}
+        aria-label={t("userGuide")}
+      >
+        <div className="floating-guide-icon-box">
+          <BookOpen size={13} />
+        </div>
+        <span>{t("userGuide")}</span>
+      </button>
+
       {/* Task Detail Modal */}
       {detailTodo && (
         <TaskDetailModal
           todo={detailTodo}
           allTodos={todos}
-          lists={lists}
+          comments={comments.filter((c) => c.todoId === detailTodo.id)}
+          lists={currentBoardLists}
+          userName={userName}
           t={t}
           dateLocale={dateLocale}
           onClose={closeDetailModal}
           onUpdate={updateTodo}
           onDelete={requestDelete}
           onMove={moveTodo}
+          onAddComment={(text, img) => addComment(detailTodo.id, text, img)}
+          onUpdateComment={updateComment}
+          onDeleteComment={(commentId) => deleteComment(commentId, detailTodo.id)}
         />
+      )}
+
+      {/* User Guide Modal */}
+      {dialogMode === "guide" && (
+        <Modal title={t("howToUse")} onClose={closeDialog}>
+          <div className="user-guide-modal-body">
+            <p className="guide-intro-text">{t("guideIntro")}</p>
+
+            <div className="guide-features-list">
+              <div className="guide-feature-item">
+                <strong>{t("guideDragDropTitle")}</strong>
+                <p>{t("guideDragDropDesc")}</p>
+              </div>
+
+              <div className="guide-feature-item">
+                <strong>{t("guideKeyboardTitle")}</strong>
+                <p>{t("guideKeyboardDesc")}</p>
+              </div>
+
+              <div className="guide-feature-item">
+                <strong>{t("guideAnalyticsTitle")}</strong>
+                <p>{t("guideAnalyticsDesc")}</p>
+              </div>
+
+              <div className="guide-feature-item">
+                <strong>{t("guideSettingsTitle")}</strong>
+                <p>{t("guideSettingsDesc")}</p>
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button type="button" className="save-button" onClick={closeDialog}>
+                <Check size={16} /> {t("gotIt")}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* Create Board Modal */}
       {dialogMode === "createBoard" && (
         <Modal title={t("createBoard")} onClose={closeDialog}>
-          <form className="task-form card" onSubmit={(e) => { e.preventDefault(); void handleCreateBoard(); }}>
+          <form className="task-form card" onSubmit={(e) => { e.preventDefault(); handleCreateBoard(); }}>
             <label>
               {t("boardName")}
               <input
@@ -1185,7 +1290,7 @@ export default function TodoList() {
             inputRef={inputRef}
             onSubmit={addTodo}
             submitLabel={t("saveTask")}
-            lists={lists}
+            lists={currentBoardLists}
             onCancel={closeDialog}
           />
         </Modal>
@@ -1194,7 +1299,7 @@ export default function TodoList() {
       {/* Quick Edit Title Modal */}
       {dialogMode === "edit" && editingTodo && (
         <Modal title={t("editTask")} onClose={closeDialog}>
-          <form className="edit-title-form" onSubmit={(event) => { event.preventDefault(); void saveEditing(); }}>
+          <form className="edit-title-form" onSubmit={(event) => { event.preventDefault(); saveEditing(); }}>
             <label>{t("title")}<input value={editingTitle} onChange={(event) => setEditingTitle(event.target.value)} autoFocus /></label>
             <div className="modal-actions">
               <button type="button" className="secondary-button" onClick={closeDialog}>{t("cancel")}</button>
@@ -1211,7 +1316,7 @@ export default function TodoList() {
             <p>{t("deleteWarning")}</p>
             <div className="modal-actions">
               <button type="button" className="secondary-button" onClick={closeDialog}>{t("cancel")}</button>
-              <button type="button" className="danger-button" onClick={() => void deleteTodo()}>{t("delete")}</button>
+              <button type="button" className="danger-button" onClick={deleteTodo}>{t("delete")}</button>
             </div>
           </div>
         </Modal>
@@ -1224,7 +1329,7 @@ export default function TodoList() {
             <p>{t("deleteListWarning")}</p>
             <div className="modal-actions">
               <button type="button" className="secondary-button" onClick={closeDialog}>{t("cancel")}</button>
-              <button type="button" className="danger-button" onClick={() => void confirmDeleteList()}>{t("delete")}</button>
+              <button type="button" className="danger-button" onClick={confirmDeleteList}>{t("delete")}</button>
             </div>
           </div>
         </Modal>
@@ -1237,7 +1342,7 @@ export default function TodoList() {
             <p>{t("clearCompletedWarning")}</p>
             <div className="modal-actions">
               <button type="button" className="secondary-button" onClick={closeDialog}>{t("cancel")}</button>
-              <button type="button" className="danger-button" onClick={() => void handleClearCompletedTasks()}>{t("delete")}</button>
+              <button type="button" className="danger-button" onClick={handleClearCompletedTasks}>{t("delete")}</button>
             </div>
           </div>
         </Modal>
@@ -1253,7 +1358,7 @@ export default function TodoList() {
               <button
                 type="button"
                 className="danger-button"
-                onClick={async () => {
+                onClick={() => {
                   localStorage.clear();
                   window.location.reload();
                 }}
@@ -1268,8 +1373,59 @@ export default function TodoList() {
   );
 }
 
+function AppLogo({ size = 32 }: { size?: number }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 48 48"
+      width={size}
+      height={size}
+      fill="none"
+      className="app-brand-logo-svg"
+      aria-hidden="true"
+    >
+      <defs>
+        <linearGradient id="cleanLogoBg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ff6b6b" />
+          <stop offset="60%" stopColor="var(--primary, #ee4040)" />
+          <stop offset="100%" stopColor="var(--primary-strong, #c92a2a)" />
+        </linearGradient>
+        
+        <linearGradient id="cleanTileGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.32" />
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0.08" />
+        </linearGradient>
+
+        <linearGradient id="cleanCheckStroke" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="100%" stopColor="#fff5f5" />
+        </linearGradient>
+
+        <filter id="cleanLogoGlow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="var(--primary, #ee4040)" floodOpacity="0.35" />
+        </filter>
+      </defs>
+
+      {/* Outer Rounded Squircle Base */}
+      <rect x="3" y="3" width="42" height="42" rx="13" fill="url(#cleanLogoBg)" filter="url(#cleanLogoGlow)" />
+      
+      {/* Subtle Highlight Border */}
+      <rect x="3.5" y="3.5" width="41" height="41" rx="12.5" stroke="#ffffff" strokeWidth="1" strokeOpacity="0.3" fill="none" />
+
+      {/* Left Accent Task Tile */}
+      <rect x="11" y="13" width="8" height="22" rx="4" fill="url(#cleanTileGrad)" stroke="#ffffff" strokeWidth="0.8" strokeOpacity="0.2" />
+
+      {/* Right Floating Task Card */}
+      <rect x="22" y="13" width="15" height="22" rx="4" fill="url(#cleanTileGrad)" stroke="#ffffff" strokeWidth="0.8" strokeOpacity="0.2" />
+
+      {/* Precision Checkmark Crest */}
+      <path d="M14 24.5 L20.5 31 L34 16.5" stroke="url(#cleanCheckStroke)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 /* ============================================================ */
-/*  Sub-components                                               */
+/*  Main Component (Pure Client-Side Local Storage Architecture) */
 /* ============================================================ */
 
 function LanguageToggle({ language, onChange }: { language: "en" | "th"; onChange: (language: "en" | "th") => void }) {
@@ -1341,7 +1497,6 @@ function BoardView({
   todos,
   t,
   dateLocale,
-  isLoading,
   onAddCard,
   onMoveCard,
   onToggle,
@@ -1356,7 +1511,6 @@ function BoardView({
   todos: Todo[];
   t: (key: TranslationKey) => string;
   dateLocale: string;
-  isLoading: boolean;
   onAddCard: (listId: number) => void;
   onMoveCard: (todoId: number, listId: number, position?: number) => void;
   onToggle: (todo: Todo) => void;
@@ -1384,9 +1538,21 @@ function BoardView({
     setDragId(todoId);
   };
 
+  const boardScrollRef = useRef<HTMLElement>(null);
+
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!touchActiveRef.current) return;
     const touch = e.touches[0];
+
+    // Auto-scroll board horizontally when dragging near left/right screen edges on mobile
+    if (boardScrollRef.current) {
+      if (touch.clientX > window.innerWidth - 75) {
+        boardScrollRef.current.scrollLeft += 14;
+      } else if (touch.clientX < 75) {
+        boardScrollRef.current.scrollLeft -= 14;
+      }
+    }
+
     const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
     if (!targetEl) return;
 
@@ -1407,10 +1573,8 @@ function BoardView({
     setOverCardId(null);
   };
 
-  if (isLoading) return <div className="board-view"><SkeletonList /><SkeletonList /><SkeletonList /></div>;
-
   return (
-    <section className="board-view" aria-label={t("board")}>
+    <section ref={boardScrollRef} className="board-view" aria-label={t("board")}>
       {lists.map((list, listIndex) => {
         const cards = todos
           .filter((td) => td.listId === list.id)
@@ -1445,7 +1609,7 @@ function BoardView({
               ) : (
                 <>
                   <div className="board-column-title">
-                    <h3>{list.title}</h3>
+                    <h3>{stripEmojis(list.title)}</h3>
                     <span className="board-column-count">{cards.length}</span>
                   </div>
                   <div className="board-column-actions">
@@ -1515,11 +1679,11 @@ function BoardView({
                       >
                         {todo.completed ? <CheckCircle2 size={15} /> : <Circle size={15} />}
                       </button>
-                      <h4 className={todo.completed ? "is-completed-text" : ""}>{todo.title}</h4>
+                      <h4 className={todo.completed ? "is-completed-text" : ""}>{stripEmojis(todo.title)}</h4>
                       <GripVertical size={13} className="drag-handle" aria-hidden="true" />
                     </div>
 
-                    {todo.note && <p className="board-card-note">{todo.note}</p>}
+                    {todo.note && <p className="board-card-note">{stripEmojis(todo.note)}</p>}
 
                     <div className="board-card-meta">
                       <span className={`priority-badge ${normalizePriority(todo.priority)}`}>
@@ -1626,7 +1790,6 @@ function CalendarPlannerView({
   monthLabel,
   dateLocale,
   t,
-  isLoading,
   onSelectDate,
   onPrev,
   onNext,
@@ -1648,7 +1811,6 @@ function CalendarPlannerView({
   monthLabel: string;
   dateLocale: string;
   t: (key: TranslationKey) => string;
-  isLoading: boolean;
   onSelectDate: (dateStr: string) => void;
   onPrev: () => void;
   onNext: () => void;
@@ -1677,7 +1839,7 @@ function CalendarPlannerView({
   // Week days for Week View
   const weekDays = useMemo(() => {
     const d = new Date(currentDate);
-    const dayOfWeek = d.getDay(); // 0 is Sunday
+    const dayOfWeek = d.getDay();
     const startOfWeek = new Date(d);
     startOfWeek.setDate(d.getDate() - dayOfWeek);
 
@@ -1740,13 +1902,12 @@ function CalendarPlannerView({
               type="button"
               className="cal-month-badge"
               onClick={() => {
-                const monthInput = monthInputRef.current;
-                if (!monthInput) return;
-
-                try {
-                  monthInput.showPicker();
-                } catch {
-                  monthInput.click();
+                if (monthInputRef.current) {
+                  if (typeof monthInputRef.current.showPicker === "function") {
+                    monthInputRef.current.showPicker();
+                  } else {
+                    monthInputRef.current.click();
+                  }
                 }
               }}
               title="Select Month / Year"
@@ -1818,9 +1979,7 @@ function CalendarPlannerView({
         </div>
       </div>
 
-      {/* ============================================================ */}
-      {/* 1. MONTH VIEW (100% Equal Size Grid with Task Dots)           */}
-      {/* ============================================================ */}
+      {/* 1. MONTH VIEW */}
       {viewMode === "month" && (
         <div className="cal-planner-layout">
           {/* Month Grid */}
@@ -1907,9 +2066,7 @@ function CalendarPlannerView({
               </div>
 
               <div className="cal-day-tasks-stream">
-                {isLoading ? (
-                  <SkeletonList compact />
-                ) : selectedDateTasks.length === 0 ? (
+                {selectedDateTasks.length === 0 ? (
                   <p className="muted-empty">{t("noTasksDate")}</p>
                 ) : (
                   selectedDateTasks.map((td) => (
@@ -1945,9 +2102,7 @@ function CalendarPlannerView({
         </div>
       )}
 
-      {/* ============================================================ */}
-      {/* 2. WEEK VIEW                                                 */}
-      {/* ============================================================ */}
+      {/* 2. WEEK VIEW */}
       {viewMode === "week" && (
         <div className="cal-week-view-wrapper card">
           <div className="cal-week-grid">
@@ -2001,9 +2156,7 @@ function CalendarPlannerView({
         </div>
       )}
 
-      {/* ============================================================ */}
-      {/* 3. DAY VIEW                                                  */}
-      {/* ============================================================ */}
+      {/* 3. DAY VIEW */}
       {viewMode === "day" && (
         <div className="cal-day-view-wrapper card">
           <div className="cal-day-view-header">
@@ -2057,9 +2210,7 @@ function CalendarPlannerView({
         </div>
       )}
 
-      {/* ============================================================ */}
-      {/* 4. AGENDA VIEW                                               */}
-      {/* ============================================================ */}
+      {/* 4. AGENDA VIEW */}
       {viewMode === "agenda" && (
         <div className="cal-agenda-wrapper card">
           <div className="cal-agenda-header">
@@ -2145,10 +2296,10 @@ function AnalyticsDashboardView({
 }) {
   // Compute Tier Badge
   const tierInfo = useMemo(() => {
-    if (stats.progress >= 90) return { title: "Master Achiever 👑", desc: "ยอดเยี่ยม ไร้ที่ติ ทำงานสำเร็จเกือบครบทั้งหมด", color: "tier-gold" };
-    if (stats.progress >= 75) return { title: "Productive Pro 🔥", desc: "กำลังติดสปีด เคลียร์งานได้อย่างมีประสิทธิภาพ", color: "tier-fire" };
-    if (stats.progress >= 50) return { title: "Steady Mover ⚡", desc: "ทำงานต่อเนื่อง เดินหน้าไปได้ด้วยดี", color: "tier-blue" };
-    return { title: "Getting Started 🚀", desc: "เริ่มต้นลุยงาน ก้าวแรกสู่ความสำเร็จ", color: "tier-green" };
+    if (stats.progress >= 90) return { title: "Master Achiever", desc: "ยอดเยี่ยม ไร้ที่ติ ทำงานสำเร็จเกือบครบทั้งหมด", color: "tier-gold" };
+    if (stats.progress >= 75) return { title: "Productive Pro", desc: "กำลังติดสปีด เคลียร์งานได้อย่างมีประสิทธิภาพ", color: "tier-fire" };
+    if (stats.progress >= 50) return { title: "Steady Mover", desc: "ทำงานต่อเนื่อง เดินหน้าไปได้ด้วยดี", color: "tier-blue" };
+    return { title: "Getting Started", desc: "เริ่มต้นลุยงาน ก้าวแรกสู่ความสำเร็จ", color: "tier-green" };
   }, [stats.progress]);
 
   // Activity Heatmap 30 Days
@@ -2326,7 +2477,7 @@ function AnalyticsDashboardView({
             <Flame size={32} className="streak-flame" />
             <div>
               <strong>{stats.streak}</strong>
-              <span>วันต่อเนื่อง 🔥</span>
+              <span>วันต่อเนื่อง</span>
             </div>
           </div>
 
@@ -2572,7 +2723,7 @@ function SettingsView({
               onClick={() => playCompletionSound()}
               title="Test Sound FX"
             >
-              ทดสอบเสียง 🎵
+              ทดสอบเสียง
             </button>
             <label className="toggle-switch-wrap">
               <input
@@ -2701,23 +2852,33 @@ function SettingsView({
 function TaskDetailModal({
   todo,
   allTodos,
+  comments,
   lists,
+  userName = "Workspace User",
   t,
   dateLocale,
   onClose,
   onUpdate,
   onDelete,
   onMove,
+  onAddComment,
+  onUpdateComment,
+  onDeleteComment,
 }: {
   todo: Todo;
   allTodos: Todo[];
+  comments: TodoComment[];
   lists: BoardList[];
+  userName?: string;
   t: (key: TranslationKey) => string;
   dateLocale: string;
   onClose: () => void;
-  onUpdate: (id: number, updates: Partial<Todo>) => Promise<Todo | null>;
+  onUpdate: (id: number, updates: Partial<Todo>) => void;
   onDelete: (todo: Todo) => void;
   onMove: (todoId: number, listId: number, position?: number) => void;
+  onAddComment: (content: string, imageUrl?: string | null) => void;
+  onUpdateComment: (id: number, content: string) => void;
+  onDeleteComment: (id: number) => void;
 }) {
   const [title, setTitle] = useState(todo.title);
   const [note, setNote] = useState(todo.note || "");
@@ -2731,13 +2892,10 @@ function TaskDetailModal({
   const [images, setImages] = useState<string[]>(Array.isArray(todo.images) ? todo.images : []);
 
   // Comments state
-  const [comments, setComments] = useState<TodoComment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [commentImage, setCommentImage] = useState<string | null>(null);
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
   const [editingCommentText, setEditingCommentText] = useState("");
-  const [isPostingComment, setIsPostingComment] = useState(false);
-  const [isCommentsLoading, setIsCommentsLoading] = useState(true);
 
   const dataImageFileInputRef = useRef<HTMLInputElement>(null);
   const commentFileInputRef = useRef<HTMLInputElement>(null);
@@ -2745,38 +2903,6 @@ function TaskDetailModal({
   const currentListCards = useMemo(() => {
     return allTodos.filter((t) => t.listId === (todo.listId ?? lists[0]?.id));
   }, [allTodos, todo.listId, lists]);
-
-  // Fetch comments
-  useEffect(() => {
-    let isMounted = true;
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => {
-      setIsCommentsLoading(true);
-
-      fetch(`${API_BASE}/todos/${todo.id}/comments`, { signal: controller.signal })
-        .then((res) => {
-          if (!res.ok) throw new Error("Unable to load comments");
-          return res.json() as Promise<TodoComment[]>;
-        })
-        .then((data) => {
-          if (isMounted) {
-            setComments(Array.isArray(data) ? data : []);
-            setIsCommentsLoading(false);
-          }
-        })
-        .catch((err: unknown) => {
-          if (err instanceof DOMException && err.name === "AbortError") return;
-          console.error("Failed to load comments", err);
-          if (isMounted) setIsCommentsLoading(false);
-        });
-    }, 0);
-
-    return () => {
-      isMounted = false;
-      window.clearTimeout(timeoutId);
-      controller.abort();
-    };
-  }, [todo.id]);
 
   // Support Ctrl+V anywhere in modal to paste image
   useEffect(() => {
@@ -2797,7 +2923,7 @@ function TaskDetailModal({
                 } else {
                   setImages((prev) => {
                     const next = [...prev, base64Url];
-                    void onUpdate(todo.id, { images: next });
+                    onUpdate(todo.id, { images: next });
                     return next;
                   });
                 }
@@ -2823,7 +2949,7 @@ function TaskDetailModal({
         if (base64Url) {
           setImages((prev) => {
             const next = [...prev, base64Url];
-            void onUpdate(todo.id, { images: next });
+            onUpdate(todo.id, { images: next });
             return next;
           });
         }
@@ -2845,7 +2971,7 @@ function TaskDetailModal({
   };
 
   const handleSaveField = (key: keyof Todo, val: unknown) => {
-    void onUpdate(todo.id, { [key]: val });
+    onUpdate(todo.id, { [key]: val });
   };
 
   const handleSaveDescription = () => {
@@ -2862,10 +2988,10 @@ function TaskDetailModal({
   const handleToggleCover = (imgSrc: string) => {
     if (imageUrl === imgSrc) {
       setImageUrl("");
-      void onUpdate(todo.id, { imageUrl: null });
+      onUpdate(todo.id, { imageUrl: null });
     } else {
       setImageUrl(imgSrc);
-      void onUpdate(todo.id, { imageUrl: imgSrc });
+      onUpdate(todo.id, { imageUrl: imgSrc });
     }
   };
 
@@ -2874,65 +3000,25 @@ function TaskDetailModal({
     setImages(nextImages);
     const nextCover = imageUrl === imgSrc ? null : imageUrl;
     if (imageUrl === imgSrc) setImageUrl("");
-    void onUpdate(todo.id, { images: nextImages, imageUrl: nextCover });
+    onUpdate(todo.id, { images: nextImages, imageUrl: nextCover });
   };
 
-  const handlePostComment = async () => {
+  const handlePostComment = () => {
     const text = newComment.trim();
-    if ((!text && !commentImage) || isPostingComment) return;
+    if (!text && !commentImage) return;
 
-    setIsPostingComment(true);
-    try {
-      const res = await fetch(`${API_BASE}/todos/${todo.id}/comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: text, author: "Nonthiya (mj.)", imageUrl: commentImage }),
-      });
-
-      if (res.ok) {
-        const createdComment = (await res.json()) as TodoComment;
-        setComments((prev) => [...prev, createdComment]);
-        setNewComment("");
-        setCommentImage(null);
-      }
-    } catch (err) {
-      console.error("Failed to post comment", err);
-    } finally {
-      setIsPostingComment(false);
-    }
+    onAddComment(text, commentImage);
+    setNewComment("");
+    setCommentImage(null);
   };
 
-  const handleSaveEditedComment = async (commentId: number) => {
+  const handleSaveEditedComment = (commentId: number) => {
     const text = editingCommentText.trim();
     if (!text) return;
 
-    try {
-      const res = await fetch(`${API_BASE}/comments/${commentId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: text }),
-      });
-
-      if (res.ok) {
-        const updated = (await res.json()) as TodoComment;
-        setComments((prev) => prev.map((c) => (c.id === commentId ? updated : c)));
-        setEditingCommentId(null);
-        setEditingCommentText("");
-      }
-    } catch (err) {
-      console.error("Failed to edit comment", err);
-    }
-  };
-
-  const handleDeleteComment = async (commentId: number) => {
-    try {
-      const res = await fetch(`${API_BASE}/comments/${commentId}`, { method: "DELETE" });
-      if (res.ok) {
-        setComments((prev) => prev.filter((c) => c.id !== commentId));
-      }
-    } catch (err) {
-      console.error("Failed to delete comment", err);
-    }
+    onUpdateComment(commentId, text);
+    setEditingCommentId(null);
+    setEditingCommentText("");
   };
 
   return (
@@ -2996,7 +3082,7 @@ function TaskDetailModal({
               className={`detail-complete-checkmark ${todo.completed ? "is-done" : ""}`}
               onClick={() => {
                 const next = !todo.completed;
-                void onUpdate(todo.id, { completed: next });
+                onUpdate(todo.id, { completed: next });
               }}
               title={todo.completed ? "Mark incomplete" : "Mark complete"}
             >
@@ -3015,7 +3101,7 @@ function TaskDetailModal({
           <div className="detail-chips-bar">
             <div className="detail-chip-group">
               <span className="chip-label">{t("members")}</span>
-              <div className="member-pill"><User size={13} /> <span>Nonthiya (mj.)</span></div>
+              <div className="member-pill"><User size={13} /> <span>{userName}</span></div>
             </div>
 
             <div className="detail-chip-group">
@@ -3179,7 +3265,7 @@ function TaskDetailModal({
                 onChange={(e) => setNewComment(e.target.value)}
                 onKeyDown={(e) => {
                   if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-                    void handlePostComment();
+                    handlePostComment();
                   }
                 }}
                 rows={3}
@@ -3214,8 +3300,8 @@ function TaskDetailModal({
                 <button
                   type="button"
                   className="trello-btn-save"
-                  disabled={(!newComment.trim() && !commentImage) || isPostingComment}
-                  onClick={() => void handlePostComment()}
+                  disabled={!newComment.trim() && !commentImage}
+                  onClick={handlePostComment}
                 >
                   {t("postComment")}
                 </button>
@@ -3223,9 +3309,7 @@ function TaskDetailModal({
             </div>
 
             <div className="trello-comments-stream">
-              {isCommentsLoading ? (
-                <div className="skeleton-list compact"><span /><span /></div>
-              ) : comments.length === 0 ? (
+              {comments.length === 0 ? (
                 <p className="no-comments-text">{t("noCommentsYet")}</p>
               ) : (
                 comments.map((c) => (
@@ -3250,7 +3334,7 @@ function TaskDetailModal({
                           <button
                             type="button"
                             className="comment-inline-action-btn"
-                            onClick={() => void handleDeleteComment(c.id)}
+                            onClick={() => onDeleteComment(c.id)}
                             title={t("deleteComment")}
                           >
                             <Trash2 size={12} />
@@ -3269,7 +3353,7 @@ function TaskDetailModal({
                             <button
                               type="button"
                               className="trello-btn-save compact"
-                              onClick={() => void handleSaveEditedComment(c.id)}
+                              onClick={() => handleSaveEditedComment(c.id)}
                             >
                               {t("saveComment")}
                             </button>
@@ -3391,7 +3475,7 @@ function TaskForm({
   }, [setForm]);
 
   return (
-    <form className={compact ? "task-form compact cardless" : "task-form card"} onSubmit={(event) => { event.preventDefault(); void onSubmit(); }}>
+    <form className={compact ? "task-form compact cardless" : "task-form card"} onSubmit={(event) => { event.preventDefault(); onSubmit(); }}>
       {lists && lists.length > 0 && (
         <label>
           {t("list")}
@@ -3575,10 +3659,6 @@ function Modal({ title, children, onClose, destructive = false }: { title: strin
   return <div className={destructive ? "modal-layer destructive" : "modal-layer"} role="presentation" onMouseDown={onClose}><section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><h2 id="modal-title">{title}</h2><button type="button" onClick={onClose} aria-label={t("close")}><X size={18} /></button></div>{children}</section></div>;
 }
 
-function SkeletonList({ compact = false }: { compact?: boolean }) {
-  return <div className={compact ? "skeleton-list compact" : "skeleton-list"}>{Array.from({ length: compact ? 3 : 5 }, (_, index) => <span key={index} />)}</div>;
-}
-
 function EmptyState({ onAdd, t }: { onAdd: () => void; t: (key: TranslationKey) => string }) {
   return <div className="empty-state card"><ListTodo size={36} /><h3>{t("noTasksFound")}</h3><p>{t("noTasksHint")}</p><button type="button" onClick={onAdd}>{t("addTask")}</button></div>;
 }
@@ -3647,7 +3727,7 @@ function normalizeTodo(todo: Todo): Todo {
     dueDate: normalizedDueDate,
     dueTime: normalizeTime(todo.dueTime),
     alarmEnabled: Boolean(todo.alarmEnabled ?? todo.alarm),
-    listId: todo.listId ?? undefined,
+    listId: todo.listId ?? 1,
     imageUrl: todo.imageUrl ?? null,
     images: Array.isArray(todo.images) ? todo.images : [],
     commentsCount: Number(todo.commentsCount ?? 0),
