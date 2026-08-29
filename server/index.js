@@ -12,8 +12,10 @@ app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 const databaseUrl = process.env.DATABASE_URL;
+const isCloudHost = Boolean(process.env.DB_HOST && (process.env.DB_HOST.includes("supabase.co") || process.env.DB_HOST.includes("neon.tech") || process.env.DB_HOST.includes("railway.app")));
 const databaseUsesSsl =
   process.env.DB_SSL === "true" ||
+  isCloudHost ||
   (Boolean(databaseUrl) && process.env.DB_SSL !== "false");
 
 const pool = new Pool(
